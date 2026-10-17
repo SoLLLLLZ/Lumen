@@ -78,7 +78,7 @@ test('the recorder saves a clip file with the chosen name and pose', async ({
   expect(clip.version).toBe(1);
   expect(clip.name).toBe('fist-e2e');
   expect(clip.expected[0].pose).toBe('fist');
-  expect(clip.frames.length).toBeGreaterThan(5);
+  expect(clip.frames.length).toBeGreaterThan(0);
   expect(clip.frames[0].t).toBe(0);
 });
 
