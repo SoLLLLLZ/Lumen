@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isClip, type Clip } from './clip';
-import { evaluateClip, replayClip } from './replayer';
+import { evaluateClip, replayClip, replayEvents } from './replayer';
 
 const modules = import.meta.glob('../fixtures/clips/**/*.json', {
   eager: true,
@@ -30,6 +30,7 @@ describe('clip library', () => {
       'reading',
       'talking',
       'face-touching',
+      'wake-sleep',
     ]) {
       expect(counts[category] ?? 0, category).toBeGreaterThanOrEqual(10);
     }
@@ -52,6 +53,13 @@ describe('clip library', () => {
       it('yields the expected pose timeline', () => {
         const result = evaluateClip(clip, replayClip(clip));
         expect(result.failures.slice(0, 3)).toEqual([]);
+      });
+
+      it('emits exactly the expected events', () => {
+        if (!clip.expectedEvents) return;
+        expect(replayEvents(clip).map((event) => event.type)).toEqual(
+          clip.expectedEvents,
+        );
       });
 
       it('does not flicker within 300 ms while a pose is held', () => {
