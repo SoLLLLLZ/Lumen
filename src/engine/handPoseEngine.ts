@@ -4,8 +4,8 @@ import {
   PoseStabilizer,
   type Classification,
 } from './poseClassifier';
-import { distance, WRIST } from './measurements';
-import type { Digit } from './measurements';
+import { distance, palmPoint, WRIST } from './measurements';
+import type { Digit, PalmPoint } from './measurements';
 import type { Landmark, Pose, TrackedHand } from './types';
 
 export interface HandState {
@@ -15,6 +15,7 @@ export interface HandState {
   pose: Pose;
   pinchRatio: number;
   extensions: Record<Digit, number>;
+  palm: PalmPoint;
 }
 
 export interface EngineOptions {
@@ -90,6 +91,7 @@ export class HandPoseEngine {
         pose: slot.stabilizer.update(result.pose, timeMs),
         pinchRatio: result.pinchRatio,
         extensions: result.extensions,
+        palm: palmPoint(landmarks, this.aspect),
       });
     }
     return states.sort((a, b) => a.id - b.id);

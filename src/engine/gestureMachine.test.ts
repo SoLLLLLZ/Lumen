@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { EventBus, type GestureEvent } from './eventBus';
 import { GestureMachine } from './gestureMachine';
+import type { PalmPoint } from './measurements';
 import type { Pose } from './types';
 
-type Hand = { id: number; pose: Pose };
+type Hand = { id: number; pose: Pose; palm: PalmPoint };
+const STILL_PALM: PalmPoint = { x: 0.5, y: 0.5, size: 0.2 };
 const FRAME_MS = 33;
 
 function setup() {
@@ -23,15 +25,15 @@ function setup() {
   return { machine, events, hold, clock: () => now };
 }
 
-const palm = (id = 0): Hand => ({ id, pose: 'open_palm' });
-const fist = (id = 0): Hand => ({ id, pose: 'fist' });
+const palm = (id = 0): Hand => ({ id, pose: 'open_palm', palm: STILL_PALM });
+const fist = (id = 0): Hand => ({ id, pose: 'fist', palm: STILL_PALM });
 
 describe('GestureMachine', () => {
   it('starts asleep and ignores everything but a held open palm', () => {
     const { machine, events, hold } = setup();
     hold([fist()], 3000);
-    hold([{ id: 0, pose: 'v' }], 3000);
-    hold([{ id: 0, pose: 'pinch' }], 3000);
+    hold([{ id: 0, pose: 'v', palm: STILL_PALM }], 3000);
+    hold([{ id: 0, pose: 'pinch', palm: STILL_PALM }], 3000);
     hold([], 5000);
     expect(machine.state).toBe('asleep');
     expect(events).toEqual([]);
@@ -62,7 +64,7 @@ describe('GestureMachine', () => {
   it('does not wake when the palm is interrupted by another pose', () => {
     const { events, hold } = setup();
     hold([palm()], 500);
-    hold([{ id: 0, pose: 'none' }], 33);
+    hold([{ id: 0, pose: 'none', palm: STILL_PALM }], 33);
     hold([palm()], 500);
     expect(events).toEqual([]);
   });
@@ -109,7 +111,7 @@ describe('GestureMachine', () => {
     const { machine, hold } = setup();
     hold([palm()], 800);
     hold([], 2000);
-    hold([{ id: 0, pose: 'none' }], 100);
+    hold([{ id: 0, pose: 'none', palm: STILL_PALM }], 100);
     hold([], 2900);
     expect(machine.state).toBe('armed');
   });
@@ -157,6 +159,126 @@ describe('GestureMachine', () => {
       hold([palm(0), fist(1)], 700);
       // Neither fist was held for a full second by one hand.
       expect(machine.state).toBe('armed');
+    });
+  });
+
+  describe('flicks', () => {
+    /** Moves one open palm sideways over durationMs. */
+    function flickHand(
+      sim: ReturnType<typeof setup>,
+      dx: number,
+      durationMs = 200,
+      id = 0,
+    ) {
+      const frames = Math.round(durationMs / FRAME_MS);
+      for (let i = 0; i <= frames; i++) {
+        sim.hold(
+          [
+            {
+              id,
+              pose: 'open_palm',
+              palm: { x: 0.5 + (dx * i) / frames, y: 0.5, size: 0.2 },
+            },
+          ],
+          FRAME_MS,
+        );
+      }
+    }
+    const next = (events: GestureEvent[]) => events.map((event) => event.type);
+
+    it('ignores flicks while asleep', () => {
+      const sim = setup();
+      flickHand(sim, 0.5);
+      expect(next(sim.events)).toEqual([]);
+    });
+
+    it('emits next for a rightward flick and previous for a leftward one', () => {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      flickHand(sim, 0.5);
+      sim.hold([palm()], 800);
+      flickHand(sim, -0.5);
+      expect(next(sim.events)).toEqual(['wake', 'next', 'previous']);
+    });
+
+    it('does not turn the page on the return stroke', () => {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      flickHand(sim, 0.5);
+      flickHand(sim, -0.5);
+      expect(next(sim.events)).toEqual(['wake', 'next']);
+    });
+
+    it('ignores a flick made with a hand that is not an open palm', () => {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      for (let i = 0; i <= 6; i++) {
+        sim.hold(
+          [
+            {
+              id: 0,
+              pose: 'v',
+              palm: { x: 0.2 + i * 0.08, y: 0.5, size: 0.2 },
+            },
+          ],
+          FRAME_MS,
+        );
+      }
+      expect(next(sim.events)).toEqual(['wake']);
+    });
+
+    it('never runs a flick while a fist is being held for sleep', () => {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      sim.hold([fist(0)], 300);
+      const frames = 6;
+      for (let i = 0; i <= frames; i++) {
+        const moving: Hand = {
+          id: 1,
+          pose: 'open_palm',
+          palm: { x: 0.2 + (0.5 * i) / frames, y: 0.5, size: 0.2 },
+        };
+        sim.hold([fist(0), moving], FRAME_MS);
+      }
+      expect(next(sim.events)).toEqual(['wake']);
+    });
+
+    it('does not start a sleep fist during the flick lockout', () => {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      flickHand(sim, 0.5);
+      sim.hold([fist()], 1700);
+      // The fist hold only begins once the 400 ms lockout is over.
+      expect(next(sim.events)).toEqual(['wake', 'next', 'sleep']);
+      const sleep = sim.events[2];
+      expect(sleep?.timeMs).toBeGreaterThanOrEqual(
+        (sim.events[1]?.timeMs ?? 0) + 400 + 1000,
+      );
+    });
+
+    it('does not flick after going back to sleep', () => {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      sim.hold([fist()], 1200);
+      flickHand(sim, 0.5);
+      expect(next(sim.events)).toEqual(['wake', 'sleep']);
+    });
+
+    it('lets two hands produce only one flick event', () => {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      const frames = 6;
+      for (let i = 0; i <= frames; i++) {
+        const x = 0.2 + (0.5 * i) / frames;
+        sim.hold(
+          [
+            { id: 0, pose: 'open_palm', palm: { x, y: 0.5, size: 0.2 } },
+            { id: 1, pose: 'open_palm', palm: { x, y: 0.5, size: 0.2 } },
+          ],
+          FRAME_MS,
+        );
+      }
+      expect(next(sim.events)).toEqual(['wake', 'next']);
     });
   });
 });

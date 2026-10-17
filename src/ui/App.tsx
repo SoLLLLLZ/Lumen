@@ -24,6 +24,8 @@ const POSE_LABELS: Record<Pose, string> = {
 
 function describeEvent(event: GestureEvent): string {
   if (event.type === 'wake') return 'wake';
+  if (event.type === 'next') return 'next page';
+  if (event.type === 'previous') return 'previous page';
   return `sleep (${event.reason === 'fist' ? 'fist held' : 'no hand'})`;
 }
 

@@ -5,6 +5,7 @@ import {
   poseTarget,
   seededRng,
   type HandTrack,
+  type Move,
   type Rng,
 } from './syntheticClip';
 
@@ -179,6 +180,123 @@ function backgroundClip(kind: Background, index: number): Clip {
 }
 
 const CLIPS_PER_STATE_GROUP = 10;
+const CLIPS_PER_FLICK_GROUP = 20;
+const CLIPS_PER_ACCIDENT_GROUP = 10;
+const WAKE_HOLD_MS = 1000;
+
+/** Back-and-forth moves, such as a hand gesturing while talking. */
+function wiggle(
+  startMs: number,
+  count: number,
+  half: { dx: number; dy: number; ms: number },
+): Move[] {
+  const moves: Move[] = [];
+  for (let i = 0; i < count; i++) {
+    const sign = i % 2 === 0 ? 1 : -1;
+    const fromMs = startMs + i * half.ms;
+    moves.push({
+      fromMs,
+      toMs: fromMs + half.ms,
+      dx: sign * half.dx,
+      dy: sign * half.dy,
+    });
+  }
+  return moves;
+}
+
+/** The user wakes the system with a palm, then flicks one way. */
+function flickClip(index: number): Clip {
+  const seed = 9000 + index;
+  const rng = seededRng(seed);
+  const name = `flick-${String(index).padStart(2, '0')}`;
+  const variant = Math.floor(index / 2);
+  const rawRight = index % 2 === 0;
+  const far = variant === 1;
+  const reach = far ? 0.25 : 0.45;
+  const durationOfFlick = variant === 4 ? 320 : between(rng, 160, 240);
+  const startMs = 1500;
+  const sign = rawRight ? 1 : -1;
+  const moves: Move[] = [
+    {
+      fromMs: startMs,
+      toMs: startMs + durationOfFlick,
+      dx: sign * reach,
+      dy: variant === 2 ? between(rng, 0.05, 0.1) : 0,
+    },
+  ];
+  if (variant === 3) {
+    // The hand comes straight back, which must not count as a second flick.
+    moves.push({
+      fromMs: startMs + durationOfFlick + 80,
+      toMs: startMs + durationOfFlick + 80 + durationOfFlick,
+      dx: -sign * reach,
+      dy: 0,
+    });
+  }
+  const palm = track(rng, [{ pose: 'open_palm', fromMs: 0 }], {
+    scale: far ? between(rng, 0.085, 0.1) : between(rng, 0.15, 0.2),
+    cx: rawRight ? 0.28 : 0.72,
+    moves,
+  });
+  return buildClip({
+    name,
+    category: 'flick',
+    fps: 30,
+    seed,
+    noise: NORMAL_NOISE,
+    durationMs: 3200,
+    tracks: [palm],
+    expected: [],
+    expectedEvents: ['wake', rawRight ? 'next' : 'previous'],
+  });
+}
+
+/** Ordinary movement while awake. None of it may turn a page. */
+function accidentClip(index: number): Clip {
+  const seed = 9500 + index;
+  const rng = seededRng(seed);
+  const name = `accident-${String(index).padStart(2, '0')}`;
+  const start = WAKE_HOLD_MS + 500;
+  let pose: Pose = 'none';
+  let moves: Move[];
+  if (index <= 2) {
+    // Scratching the nose: short strokes up toward the face.
+    moves = wiggle(start, 8, { dx: 0.04, dy: -0.06, ms: 180 });
+  } else if (index <= 5) {
+    // Talking with the hands: open palm, steady back-and-forth.
+    pose = 'open_palm';
+    moves = wiggle(start, 10, { dx: 0.12, dy: 0.02, ms: 250 });
+  } else if (index <= 8) {
+    // Reaching for a mug: one slow sweep out and back with a relaxed hand.
+    moves = [
+      { fromMs: start, toMs: start + 700, dx: 0.35, dy: 0 },
+      { fromMs: start + 1400, toMs: start + 2100, dx: -0.35, dy: 0 },
+    ];
+  } else {
+    // A moderately quick reach with the palm still open.
+    pose = 'open_palm';
+    moves = [{ fromMs: start, toMs: start + 600, dx: 0.3, dy: 0 }];
+  }
+  const hand = track(
+    rng,
+    [
+      { pose: 'open_palm', fromMs: 0 },
+      { pose, fromMs: WAKE_HOLD_MS + 200 },
+    ],
+    { cx: 0.35, moves },
+  );
+  return buildClip({
+    name,
+    category: 'accident',
+    fps: 30,
+    seed,
+    noise: NORMAL_NOISE,
+    durationMs: 4200,
+    tracks: [hand],
+    expected: [],
+    expectedEvents: ['wake'],
+  });
+}
 
 /** Wake and sleep behaviour; each clip says which events it must produce. */
 function stateClip(index: number): Clip {
@@ -272,6 +390,12 @@ export function buildClipLibrary(): Clip[] {
   }
   for (let i = 0; i < CLIPS_PER_STATE_GROUP; i++) {
     clips.push(stateClip(i));
+  }
+  for (let i = 0; i < CLIPS_PER_FLICK_GROUP; i++) {
+    clips.push(flickClip(i));
+  }
+  for (let i = 0; i < CLIPS_PER_ACCIDENT_GROUP; i++) {
+    clips.push(accidentClip(i));
   }
   return clips;
 }

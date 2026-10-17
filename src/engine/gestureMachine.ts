@@ -1,4 +1,5 @@
 import type { EventBus } from './eventBus';
+import { FlickDetector } from './flickDetector';
 import type { HandState } from './handPoseEngine';
 import type { Pose } from './types';
 
@@ -19,7 +20,7 @@ export const DEFAULT_MACHINE_CONFIG: MachineConfig = {
   noHandSleepMs: 3000,
 };
 
-type MachineHand = Pick<HandState, 'id' | 'pose'>;
+type MachineHand = Pick<HandState, 'id' | 'pose' | 'palm'>;
 
 interface ActiveHold {
   handId: number;
@@ -38,6 +39,7 @@ export class GestureMachine {
   private current: GestureState = 'asleep';
   private hold: ActiveHold | null = null;
   private lastHandSeenMs = 0;
+  private readonly flicks = new FlickDetector();
 
   constructor(
     private readonly bus: EventBus,
@@ -61,6 +63,7 @@ export class GestureMachine {
 
     if (!this.hold) this.hold = this.startHold(timeMs, hands);
     if (this.hold && !this.hold.done) this.finishHold(timeMs, this.hold);
+    this.detectFlicks(timeMs, hands);
 
     if (
       this.current === 'armed' &&
@@ -71,11 +74,31 @@ export class GestureMachine {
     }
   }
 
+  private detectFlicks(timeMs: number, hands: MachineHand[]): void {
+    const holdInProgress = this.hold !== null && !this.hold.done;
+    if (this.current !== 'armed' || holdInProgress) {
+      this.flicks.clearAll();
+      return;
+    }
+    for (const hand of hands) {
+      if (hand.pose !== 'open_palm') {
+        this.flicks.clearHand(hand.id);
+        continue;
+      }
+      const direction = this.flicks.update(timeMs, hand.id, hand.palm);
+      if (direction) {
+        this.bus.emit({ type: direction, timeMs });
+        return;
+      }
+    }
+  }
+
   private wantedPose(): Pose {
     return this.current === 'asleep' ? 'open_palm' : 'fist';
   }
 
   private startHold(timeMs: number, hands: MachineHand[]): ActiveHold | null {
+    if (this.flicks.isLocked(timeMs)) return null;
     const wanted = this.wantedPose();
     const hand = hands
       .filter((candidate) => candidate.pose === wanted)
