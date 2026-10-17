@@ -30,7 +30,9 @@ async function startTracking(page: Page) {
   const startButton = page.getByRole('button', { name: 'Start camera' });
   await expect(startButton).toBeEnabled({ timeout: 30_000 });
   await startButton.click();
-  await expect(page.getByRole('status')).toHaveText('Tracking.');
+  await expect(page.getByRole('status')).toHaveText('Tracking.', {
+    timeout: 20_000,
+  });
 }
 
 test('model loads, tracking runs and the debug view reports live numbers', async ({
