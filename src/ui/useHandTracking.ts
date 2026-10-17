@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ClipRecorder } from '../engine/clipRecorder';
+import { EventBus, type GestureEvent } from '../engine/eventBus';
+import { GestureMachine, type GestureState } from '../engine/gestureMachine';
 import { HandPoseEngine, type HandState } from '../engine/handPoseEngine';
 import { RollingStats } from '../engine/rollingStats';
 import type { Pose } from '../engine/types';
@@ -24,12 +26,20 @@ export type HandReadout = Pick<
   'id' | 'pose' | 'pinchRatio' | 'extensions'
 >;
 
+export interface LoggedEvent {
+  event: GestureEvent;
+  /** Seconds since the camera started. */
+  atSeconds: number;
+}
+
 export interface TrackingStats {
   fps: number;
   trackingMs: number;
   handCount: number;
   confidences: number[];
   hands: HandReadout[];
+  gestureState: GestureState;
+  events: LoggedEvent[];
 }
 
 interface ActiveRecording {
@@ -46,7 +56,10 @@ const EMPTY_STATS: TrackingStats = {
   handCount: 0,
   confidences: [],
   hands: [],
+  gestureState: 'asleep',
+  events: [],
 };
+const MAX_LOGGED_EVENTS = 50;
 const STATS_WINDOW_MS = 2000;
 const STATS_PUBLISH_INTERVAL_MS = 250;
 
@@ -128,6 +141,14 @@ export function useHandTracking() {
 
     const frameStats = new RollingStats(STATS_WINDOW_MS);
     let engine = new HandPoseEngine();
+    const bus = new EventBus();
+    const machine = new GestureMachine(bus);
+    const sessionStartMs = performance.now();
+    let events: LoggedEvent[] = [];
+    bus.subscribe((event) => {
+      const atSeconds = (event.timeMs - sessionStartMs) / 1000;
+      events = [...events, { event, atSeconds }].slice(-MAX_LOGGED_EVENTS);
+    });
     let latestHands: HandState[] = [];
     let running = true;
     let lastVideoTime = -1;
@@ -143,6 +164,7 @@ export function useHandTracking() {
           frameStats.record(finishedAt, finishedAt - startedAt);
           recordingRef.current?.recorder.add(startedAt, raw);
           latestHands = engine.process(startedAt, raw);
+          machine.update(startedAt, latestHands);
         } catch {
           stop('error');
           return;
@@ -177,6 +199,8 @@ export function useHandTracking() {
           pinchRatio,
           extensions,
         })),
+        gestureState: machine.state,
+        events,
       });
     }, STATS_PUBLISH_INTERVAL_MS);
 

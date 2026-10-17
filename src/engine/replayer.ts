@@ -1,4 +1,6 @@
 import { frameToHands, type Clip } from './clip';
+import { EventBus, type GestureEvent } from './eventBus';
+import { GestureMachine } from './gestureMachine';
 import { HandPoseEngine } from './handPoseEngine';
 import type { Pose } from './types';
 
@@ -47,4 +49,17 @@ export function evaluateClip(
     }
   }
   return { passed: failures.length === 0, failures };
+}
+
+/** Feeds a clip through the whole pipeline and returns every event it emits. */
+export function replayEvents(clip: Clip): GestureEvent[] {
+  const engine = new HandPoseEngine({ aspect: clip.width / clip.height });
+  const bus = new EventBus();
+  const events: GestureEvent[] = [];
+  bus.subscribe((event) => events.push(event));
+  const machine = new GestureMachine(bus);
+  for (const frame of clip.frames) {
+    machine.update(frame.t, engine.process(frame.t, frameToHands(frame)));
+  }
+  return events;
 }

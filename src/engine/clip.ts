@@ -1,3 +1,4 @@
+import type { GestureEvent } from './eventBus';
 import { LANDMARK_COUNT, POSES, type Pose, type TrackedHand } from './types';
 
 /** One recorded hand: confidence and landmarks flattened as x0,y0,x1,y1,... */
@@ -27,6 +28,8 @@ export interface Clip {
   width: number;
   height: number;
   expected: ExpectedSegment[];
+  /** Event types the clip must produce, in order. Omit to skip the check. */
+  expectedEvents?: GestureEvent['type'][];
   frames: ClipFrame[];
 }
 
@@ -61,6 +64,7 @@ export function isClip(value: unknown): value is Clip {
     typeof clip.height === 'number' &&
     Array.isArray(clip.frames) &&
     Array.isArray(clip.expected) &&
+    (clip.expectedEvents === undefined || Array.isArray(clip.expectedEvents)) &&
     clip.expected.every((segment) => POSES.includes(segment.pose))
   );
 }

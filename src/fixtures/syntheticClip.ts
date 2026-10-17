@@ -1,4 +1,5 @@
 import { handsToFrame, type Clip, type ExpectedSegment } from '../engine/clip';
+import type { GestureEvent } from '../engine/eventBus';
 import type { Pose } from '../engine/types';
 import { buildHand, type HandSpec, type ThumbSpec } from './syntheticHand';
 
@@ -77,6 +78,8 @@ export interface HandTrack {
   /** Sideways wobble amplitude, fraction of image width. */
   drift: number;
   segments: TrackSegment[];
+  /** The hand leaves the picture after this time. */
+  visibleUntilMs?: number;
 }
 
 export interface ClipOptions {
@@ -89,6 +92,7 @@ export interface ClipOptions {
   seed: number;
   tracks: HandTrack[];
   expected: ExpectedSegment[];
+  expectedEvents?: GestureEvent['type'][];
   width?: number;
   height?: number;
 }
@@ -131,7 +135,10 @@ export function buildClip(options: ClipOptions): Clip {
   const rng = seededRng(options.seed);
   const frames = [];
   for (let t = 0; t <= options.durationMs; t += 1000 / fps) {
-    const hands = options.tracks.map((track) => ({
+    const visible = options.tracks.filter(
+      (track) => t <= (track.visibleUntilMs ?? Infinity),
+    );
+    const hands = visible.map((track) => ({
       landmarks: buildHand(specAt(track, t, aspect)).map((point) => ({
         x: point.x + gaussian(rng) * options.noise,
         y: point.y + gaussian(rng) * options.noise * aspect,
@@ -147,6 +154,7 @@ export function buildClip(options: ClipOptions): Clip {
     width,
     height,
     expected: options.expected,
+    ...(options.expectedEvents && { expectedEvents: options.expectedEvents }),
     frames,
   };
 }

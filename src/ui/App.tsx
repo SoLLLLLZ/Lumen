@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { GestureEvent } from '../engine/eventBus';
 import { POSES, type Pose } from '../engine/types';
 import { useHandTracking, type TrackingPhase } from './useHandTracking';
 
@@ -20,6 +21,11 @@ const POSE_LABELS: Record<Pose, string> = {
   fist: 'Fist',
   none: 'No pose',
 };
+
+function describeEvent(event: GestureEvent): string {
+  if (event.type === 'wake') return 'wake';
+  return `sleep (${event.reason === 'fist' ? 'fist held' : 'no hand'})`;
+}
 
 export function App() {
   const {
@@ -141,9 +147,30 @@ export function App() {
                   .join('; ')
               : 'no hand'}
           </dd>
+          <dt>Gesture state</dt>
+          <dd data-testid="gesture-state">
+            {stats.gestureState === 'armed' ? 'Awake' : 'Asleep'}
+          </dd>
           <dt>Backend</dt>
           <dd>{delegate === 'GPU' ? 'GPU' : 'CPU (GPU unavailable)'}</dd>
         </dl>
+      )}
+
+      {isRunning && showDebug && (
+        <section aria-label="Event log">
+          <h2>Event log</h2>
+          {stats.events.length === 0 ? (
+            <p data-testid="event-log-empty">No events yet.</p>
+          ) : (
+            <ol data-testid="event-log">
+              {stats.events.map(({ event, atSeconds }, index) => (
+                <li key={index}>
+                  {atSeconds.toFixed(1)} s: {describeEvent(event)}
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
       )}
 
       {isRunning && showDebug && (

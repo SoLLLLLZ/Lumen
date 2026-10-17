@@ -50,6 +50,8 @@ test('model loads, tracking runs and the debug view reports live numbers', async
   }).toPass({ timeout: 10_000 });
   await expect(page.getByTestId('hands')).toHaveText('0');
   await expect(page.getByTestId('poses')).toHaveText('no hand');
+  await expect(page.getByTestId('gesture-state')).toHaveText('Asleep');
+  await expect(page.getByTestId('event-log-empty')).toBeVisible();
 });
 
 test('the recorder saves a clip file with the chosen name and pose', async ({

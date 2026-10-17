@@ -134,6 +134,7 @@ function backgroundClip(kind: Background, index: number): Clip {
     noise: NORMAL_NOISE,
     durationMs: 2000,
     expected: [none],
+    expectedEvents: [],
   };
 
   if (kind === 'reading') {
@@ -177,6 +178,86 @@ function backgroundClip(kind: Background, index: number): Clip {
   });
 }
 
+const CLIPS_PER_STATE_GROUP = 10;
+
+/** Wake and sleep behaviour; each clip says which events it must produce. */
+function stateClip(index: number): Clip {
+  const seed = 8000 + index;
+  const rng = seededRng(seed);
+  const name = `wake-sleep-${String(index).padStart(2, '0')}`;
+  const base = {
+    name,
+    category: 'wake-sleep',
+    fps: 30,
+    seed,
+    noise: NORMAL_NOISE,
+    expected: [],
+  };
+
+  if (index <= 3) {
+    // Palm held up the whole time: wakes once and never again.
+    return buildClip({
+      ...base,
+      durationMs: 2000,
+      tracks: [track(rng, [{ pose: 'open_palm', fromMs: 0 }])],
+      expectedEvents: ['wake'],
+    });
+  }
+  if (index <= 5) {
+    // A palm raised for under half a second does nothing.
+    return buildClip({
+      ...base,
+      durationMs: 2000,
+      tracks: [
+        track(rng, [
+          { pose: 'open_palm', fromMs: 0 },
+          { pose: 'none', fromMs: 450 },
+        ]),
+      ],
+      expectedEvents: [],
+    });
+  }
+  if (index <= 7) {
+    return buildClip({
+      ...base,
+      durationMs: 3500,
+      tracks: [
+        track(rng, [
+          { pose: 'open_palm', fromMs: 0 },
+          { pose: 'fist', fromMs: 1300 },
+        ]),
+      ],
+      expectedEvents: ['wake', 'sleep'],
+    });
+  }
+  if (index === 8) {
+    // The hand leaves the picture: sleeps after 3 s.
+    return buildClip({
+      ...base,
+      durationMs: 5000,
+      tracks: [
+        track(rng, [{ pose: 'open_palm', fromMs: 0 }], {
+          visibleUntilMs: 1100,
+        }),
+      ],
+      expectedEvents: ['wake', 'sleep'],
+    });
+  }
+  return buildClip({
+    ...base,
+    durationMs: 4800,
+    tracks: [
+      track(rng, [
+        { pose: 'open_palm', fromMs: 0 },
+        { pose: 'fist', fromMs: 1300 },
+        { pose: 'none', fromMs: 2900 },
+        { pose: 'open_palm', fromMs: 3300 },
+      ]),
+    ],
+    expectedEvents: ['wake', 'sleep', 'wake'],
+  });
+}
+
 export function buildClipLibrary(): Clip[] {
   const clips: Clip[] = [];
   for (const gesture of GESTURES) {
@@ -188,6 +269,9 @@ export function buildClipLibrary(): Clip[] {
     for (let i = 0; i < CLIPS_PER_BACKGROUND; i++) {
       clips.push(backgroundClip(kind, i));
     }
+  }
+  for (let i = 0; i < CLIPS_PER_STATE_GROUP; i++) {
+    clips.push(stateClip(i));
   }
   return clips;
 }
