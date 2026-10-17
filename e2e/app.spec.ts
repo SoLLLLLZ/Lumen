@@ -135,3 +135,24 @@ test('blocked camera permission shows a clear message', async ({ page }) => {
     'Camera access was blocked',
   );
 });
+
+test('a faint hand overlay covers the page while the camera runs', async ({
+  page,
+}) => {
+  await trackCameraStreams(page);
+  await startTracking(page);
+  const overlay = page.locator('canvas.hand-overlay');
+  const viewport = page.viewportSize();
+  const box = await overlay.boundingBox();
+  expect(box).toMatchObject({
+    x: 0,
+    y: 0,
+    width: viewport?.width,
+    height: viewport?.height,
+  });
+  await expect(overlay).toHaveCSS('pointer-events', 'none');
+  const pixelWidth = await overlay.evaluate(
+    (canvas) => (canvas as HTMLCanvasElement).width,
+  );
+  expect(pixelWidth).toBeGreaterThanOrEqual(viewport?.width ?? 0);
+});

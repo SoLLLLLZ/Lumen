@@ -50,6 +50,7 @@ export function App() {
   const {
     videoRef,
     canvasRef,
+    overlayRef,
     model,
     delegate,
     phase,
@@ -96,6 +97,7 @@ export function App() {
       </p>
 
       <Reader bus={bus} />
+      <canvas ref={overlayRef} className="hand-overlay" aria-hidden="true" />
 
       {model.status === 'loading' && (
         <p>

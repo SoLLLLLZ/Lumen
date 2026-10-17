@@ -43,8 +43,8 @@ test('a replayed V that opens wider zooms in', async ({ page }) => {
   const start = (await frameBox(page)).width;
   await replay(page, 'zoom-00');
   const zoom = await zoomOf(page, start);
-  expect(zoom).toBeGreaterThan(1.15);
-  expect(zoom).toBeLessThan(1.5);
+  expect(zoom).toBeGreaterThan(1.6);
+  expect(zoom).toBeLessThan(2.1);
 });
 
 test('a replayed V that closes zooms out', async ({ page }) => {
@@ -53,8 +53,18 @@ test('a replayed V that closes zooms out', async ({ page }) => {
   const start = (await frameBox(page)).width;
   await replay(page, 'zoom-01');
   const zoom = await zoomOf(page, start);
-  expect(zoom).toBeGreaterThan(0.68);
-  expect(zoom).toBeLessThan(0.85);
+  expect(zoom).toBeGreaterThan(0.45);
+  expect(zoom).toBeLessThan(0.65);
+});
+
+test('relaxing the thumb while letting go of the V does not zoom back out', async ({
+  page,
+}) => {
+  const start = (await frameBox(page)).width;
+  await replay(page, 'zoom-03');
+  const zoom = await zoomOf(page, start);
+  expect(zoom).toBeGreaterThan(1.6);
+  expect(zoom).toBeLessThan(2.1);
 });
 
 test('a V while asleep zooms nothing', async ({ page }) => {
@@ -165,6 +175,7 @@ test('a replayed double pinch resets the view', async ({ page }) => {
   await press(page, 'Shift+ArrowLeft', 5);
   await replay(page, 'double-pinch-00');
   expect(await frameBox(page)).toEqual(before);
+  await expect(page.getByTestId('reader-notice')).toHaveText('View reset');
 });
 
 test('a zoomed or panned page never makes the browser scroll', async ({

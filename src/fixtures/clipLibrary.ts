@@ -455,8 +455,9 @@ const ZOOM_RELEASE_MS = 3200;
 const OPEN_NARROW = 0.15;
 const OPEN_WIDE = 1;
 
-type ZoomKind = 'spread' | 'close' | 'asleep';
-const ZOOM_KINDS: ZoomKind[] = ['spread', 'close', 'asleep'];
+type ZoomKind = 'spread' | 'close' | 'asleep' | 'release';
+const ZOOM_KINDS: ZoomKind[] = ['spread', 'close', 'asleep', 'release'];
+const RELEASE_OPEN_DELAY_MS = 50;
 
 /** A V held steady, with the thumb moving away from or toward the index finger. */
 function zoomClip(index: number): Clip {
@@ -488,7 +489,15 @@ function zoomClip(index: number): Clip {
       { fromMs: 0, target: palm },
       { fromMs: vStart, target: withOpen(from) },
       ...steps,
-      { fromMs: ZOOM_RELEASE_MS, target: palm },
+      ...(kind === 'release'
+        ? [
+            {
+              fromMs: ZOOM_RELEASE_MS,
+              target: withOpen(OPEN_NARROW),
+            },
+          ]
+        : []),
+      { fromMs: ZOOM_RELEASE_MS + RELEASE_OPEN_DELAY_MS, target: palm },
     ],
   };
   return buildClip({

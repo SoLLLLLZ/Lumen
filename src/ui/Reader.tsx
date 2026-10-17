@@ -23,6 +23,7 @@ import { measureWithDom, renderWords } from '../reader/renderPage';
 
 export const PAGE_TURN_MS = 400;
 const RESIZE_DELAY_MS = 150;
+const NOTICE_MS = 1500;
 const SLIDE_PX = 40;
 const TEXT_FIELDS = new Set(['INPUT', 'SELECT', 'TEXTAREA']);
 
@@ -52,6 +53,7 @@ export function Reader({ bus }: { bus: EventBus }) {
   // The first word on screen. It survives resizing, page numbers do not.
   const anchorRef = useRef(loadWordIndex(localStorage, aliceWords));
   const turnRef = useRef<1 | -1 | 0>(0);
+  const [notice, setNotice] = useState('');
 
   const repaginate = useCallback(() => {
     const measureEl = measureRef.current;
@@ -211,10 +213,19 @@ export function Reader({ bus }: { bus: EventBus }) {
             y: event.y * window.innerHeight,
           });
         }
-        if (event.type === 'reset-view') showView(DEFAULT_VIEW);
+        if (event.type === 'reset-view') {
+          showView(DEFAULT_VIEW);
+          setNotice('View reset');
+        }
       }),
     [bus, turn, startPinch, panBy, zoomBy, showView],
   );
+
+  useEffect(() => {
+    if (notice === '') return;
+    const timer = window.setTimeout(() => setNotice(''), NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -245,6 +256,13 @@ export function Reader({ bus }: { bus: EventBus }) {
         <div ref={pageRef} className="page" data-testid="page" />
         <div ref={measureRef} className="page measure" aria-hidden="true" />
       </div>
+      <p
+        aria-live="polite"
+        className="reader-notice"
+        data-testid="reader-notice"
+      >
+        {notice}
+      </p>
       <div className="reader-controls">
         <button
           type="button"

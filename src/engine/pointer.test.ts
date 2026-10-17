@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapToScreen } from './pointer';
+import { mapToScreen, mapToScreenUnclamped } from './pointer';
 
 describe('mapToScreen', () => {
   const zone = 0.6;
@@ -38,5 +38,18 @@ describe('mapToScreen', () => {
     const half = mapToScreen({ x: 0.5, y: 0.25 }, 0.5);
     expect(half.x).toBeCloseTo(0.5, 10);
     expect(half.y).toBeCloseTo(0, 10);
+  });
+});
+
+describe('mapToScreenUnclamped', () => {
+  it('agrees with mapToScreen inside the zone', () => {
+    const point = { x: 0.35, y: 0.6 };
+    expect(mapToScreenUnclamped(point, 0.6)).toEqual(mapToScreen(point, 0.6));
+  });
+
+  it('lets a point outside the zone land off screen', () => {
+    const mapped = mapToScreenUnclamped({ x: 0, y: 1 }, 0.6);
+    expect(mapped.x).toBeGreaterThan(1);
+    expect(mapped.y).toBeGreaterThan(1);
   });
 });
