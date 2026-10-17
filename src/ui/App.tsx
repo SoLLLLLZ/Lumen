@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import type { GestureEvent } from '../engine/eventBus';
+import { useMemo, useState, type ChangeEvent } from 'react';
+import { isClip } from '../engine/clip';
+import { replayEvents } from '../engine/replayer';
+import { EventBus, type GestureEvent } from '../engine/eventBus';
 import { POSES, type Pose } from '../engine/types';
 import { Reader } from './Reader';
 import { useHandTracking, type TrackingPhase } from './useHandTracking';
@@ -31,6 +33,7 @@ function describeEvent(event: GestureEvent): string {
 }
 
 export function App() {
+  const bus = useMemo(() => new EventBus(), []);
   const {
     videoRef,
     canvasRef,
@@ -45,10 +48,27 @@ export function App() {
     stopRecording,
     start,
     turnOff,
-  } = useHandTracking();
+  } = useHandTracking(bus);
   const [showDebug, setShowDebug] = useState(true);
   const [clipName, setClipName] = useState('');
   const [clipPose, setClipPose] = useState<Pose>('open_palm');
+
+  const [replayMessage, setReplayMessage] = useState('');
+
+  async function replayFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const clip: unknown = JSON.parse(await file.text());
+      if (!isClip(clip)) throw new Error('Not a clip file');
+      const events = replayEvents(clip);
+      events.forEach((gesture) => bus.emit(gesture));
+      setReplayMessage(`Replayed ${clip.name}: ${events.length} events.`);
+    } catch {
+      setReplayMessage('Could not read that clip file.');
+    }
+  }
 
   const isRunning = phase === 'running';
   const canStart =
@@ -62,7 +82,7 @@ export function App() {
         device only. Nothing is stored or sent anywhere.
       </p>
 
-      <Reader />
+      <Reader bus={bus} />
 
       {model.status === 'loading' && (
         <p>
@@ -176,6 +196,14 @@ export function App() {
             </ol>
           )}
         </section>
+      )}
+
+      <label className="replay">
+        Replay a clip file{' '}
+        <input type="file" accept=".json" onChange={replayFile} />
+      </label>
+      {replayMessage !== '' && (
+        <p data-testid="replay-message">{replayMessage}</p>
       )}
 
       {isRunning && showDebug && (

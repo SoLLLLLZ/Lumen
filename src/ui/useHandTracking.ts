@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ClipRecorder } from '../engine/clipRecorder';
-import { EventBus, type GestureEvent } from '../engine/eventBus';
+import type { EventBus, GestureEvent } from '../engine/eventBus';
 import { GestureMachine, type GestureState } from '../engine/gestureMachine';
 import { HandPoseEngine, type HandState } from '../engine/handPoseEngine';
 import { RollingStats } from '../engine/rollingStats';
@@ -68,7 +68,7 @@ interface Session {
   end: () => void;
 }
 
-export function useHandTracking() {
+export function useHandTracking(bus: EventBus) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const trackerRef = useRef<HandTracker | null>(null);
@@ -141,7 +141,6 @@ export function useHandTracking() {
 
     const frameStats = new RollingStats(STATS_WINDOW_MS);
     let engine = new HandPoseEngine();
-    const bus = new EventBus();
     const machine = new GestureMachine(bus);
     const sessionStartMs = performance.now();
     let events: LoggedEvent[] = [];
@@ -240,7 +239,7 @@ export function useHandTracking() {
     if (!running) return;
     setPhase('running');
     scheduleNextFrame();
-  }, [stop]);
+  }, [stop, bus]);
 
   const startRecording = useCallback((name: string, pose: Pose) => {
     const video = videoRef.current;
