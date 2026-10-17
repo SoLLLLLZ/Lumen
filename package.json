@@ -13,7 +13,8 @@
     "test:e2e": "playwright test",
     "predev": "node scripts/copy-wasm.mjs",
     "prebuild": "node scripts/copy-wasm.mjs",
-    "clips:generate": "tsx src/fixtures/generateClips.ts"
+    "clips:generate": "tsx src/fixtures/generateClips.ts",
+    "book:build": "tsx src/reader/buildBook.ts"
   },
   "repository": {
     "type": "git",
