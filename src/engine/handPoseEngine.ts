@@ -4,7 +4,7 @@ import {
   PoseStabilizer,
   type Classification,
 } from './poseClassifier';
-import { distance, palmPoint, WRIST } from './measurements';
+import { distance, palmPoint, pinchPoint, WRIST } from './measurements';
 import type { Digit, PalmPoint } from './measurements';
 import type { Landmark, Pose, TrackedHand } from './types';
 
@@ -16,6 +16,8 @@ export interface HandState {
   pinchRatio: number;
   extensions: Record<Digit, number>;
   palm: PalmPoint;
+  /** Pinch midpoint in image coordinates. */
+  pointer: Landmark;
 }
 
 export interface EngineOptions {
@@ -92,6 +94,7 @@ export class HandPoseEngine {
         pinchRatio: result.pinchRatio,
         extensions: result.extensions,
         palm: palmPoint(landmarks, this.aspect),
+        pointer: pinchPoint(landmarks),
       });
     }
     return states.sort((a, b) => a.id - b.id);

@@ -9,6 +9,13 @@ import type { EventBus } from '../engine/eventBus';
 import { aliceBook, aliceWords } from '../reader/alice';
 import { loadWordIndex, savePosition } from '../reader/position';
 import { pageContaining, paginate, type Page } from '../reader/paginate';
+import {
+  PanSession,
+  clampPan,
+  isEmptySpace,
+  type Point,
+  type Rect,
+} from '../reader/view';
 import { measureWithDom, renderWords } from '../reader/renderPage';
 
 export const PAGE_TURN_MS = 400;
@@ -18,13 +25,25 @@ const TEXT_FIELDS = new Set(['INPUT', 'SELECT', 'TEXTAREA']);
 
 const FALLBACK_PAGE: Page[] = [{ start: 0, end: 1 }];
 
+function viewportRect(): Rect {
+  return {
+    left: 0,
+    top: 0,
+    right: window.innerWidth,
+    bottom: window.innerHeight,
+  };
+}
+
 function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 export function Reader({ bus }: { bus: EventBus }) {
   const pageRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
+  const panRef = useRef<Point>({ x: 0, y: 0 });
+  const panSession = useRef(new PanSession());
   const [pages, setPages] = useState<Page[]>(FALLBACK_PAGE);
   const [pageIndex, setPageIndex] = useState(0);
   // The first word on screen. It survives resizing, page numbers do not.
@@ -89,20 +108,80 @@ export function Reader({ bus }: { bus: EventBus }) {
     [lastIndex],
   );
 
+  const startPinch = useCallback((point: Point) => {
+    const frame = frameRef.current;
+    const text = pageRef.current;
+    if (!frame || !text) return;
+    const textRect = text.getBoundingClientRect();
+    const style = getComputedStyle(text);
+    const pad = (value: string) => parseFloat(value) || 0;
+    const empty = isEmptySpace(point, {
+      page: frame.getBoundingClientRect(),
+      text: {
+        left: textRect.left + pad(style.paddingLeft),
+        top: textRect.top + pad(style.paddingTop),
+        right: textRect.right - pad(style.paddingRight),
+        bottom: textRect.bottom - pad(style.paddingBottom),
+      },
+      viewport: viewportRect(),
+    });
+    panSession.current.start(empty);
+    document.body.classList.toggle('panning', empty);
+  }, []);
+
+  const panBy = useCallback((delta: Point) => {
+    const frame = frameRef.current;
+    const move = panSession.current.move(delta);
+    if (!frame || !move) return;
+    const shown = frame.getBoundingClientRect();
+    const current = panRef.current;
+    const base: Rect = {
+      left: shown.left - current.x,
+      top: shown.top - current.y,
+      right: shown.right - current.x,
+      bottom: shown.bottom - current.y,
+    };
+    const next = clampPan(
+      { x: current.x + move.x, y: current.y + move.y },
+      base,
+      viewportRect(),
+    );
+    panRef.current = next;
+    frame.style.transform = `translate(${next.x}px, ${next.y}px)`;
+  }, []);
+
   useEffect(
     () =>
       bus.subscribe((event) => {
         if (event.type === 'next') turn(1);
         if (event.type === 'previous') turn(-1);
+        if (event.type === 'pinch-start') {
+          startPinch({
+            x: event.x * window.innerWidth,
+            y: event.y * window.innerHeight,
+          });
+        }
+        if (event.type === 'pan') {
+          panBy({
+            x: event.dx * window.innerWidth,
+            y: event.dy * window.innerHeight,
+          });
+        }
+        if (event.type === 'pinch-end') {
+          panSession.current.end();
+          document.body.classList.remove('panning');
+        }
       }),
-    [bus, turn],
+    [bus, turn, startPinch, panBy],
   );
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target && TEXT_FIELDS.has(target.tagName)) return;
-      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
       if (event.key === 'ArrowRight') {
         turn(1);
       } else if (event.key === 'ArrowLeft') {
@@ -121,7 +200,7 @@ export function Reader({ bus }: { bus: EventBus }) {
       <p className="reader-title">
         {aliceBook.title}, by {aliceBook.author}
       </p>
-      <div className="page-frame">
+      <div ref={frameRef} className="page-frame">
         <div ref={pageRef} className="page" data-testid="page" />
         <div ref={measureRef} className="page measure" aria-hidden="true" />
       </div>

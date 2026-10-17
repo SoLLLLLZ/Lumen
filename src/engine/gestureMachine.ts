@@ -1,6 +1,7 @@
 import type { EventBus } from './eventBus';
 import { FlickDetector } from './flickDetector';
 import type { HandState } from './handPoseEngine';
+import { mapToScreen, DEFAULT_ACTIVE_ZONE, type ScreenPoint } from './pointer';
 import type { Pose } from './types';
 
 export type GestureState = 'asleep' | 'armed';
@@ -20,13 +21,15 @@ export const DEFAULT_MACHINE_CONFIG: MachineConfig = {
   noHandSleepMs: 3000,
 };
 
-type MachineHand = Pick<HandState, 'id' | 'pose' | 'palm'>;
+type MachineHand = Pick<HandState, 'id' | 'pose' | 'palm' | 'pointer'>;
 
 interface ActiveHold {
   handId: number;
   pose: Pose;
   sinceMs: number;
   done: boolean;
+  /** Where a pinch was last seen on screen. */
+  lastPoint?: ScreenPoint;
 }
 
 /**
@@ -40,6 +43,7 @@ export class GestureMachine {
   private hold: ActiveHold | null = null;
   private lastHandSeenMs = 0;
   private readonly flicks = new FlickDetector();
+  private activeZone = DEFAULT_ACTIVE_ZONE;
 
   constructor(
     private readonly bus: EventBus,
@@ -50,6 +54,11 @@ export class GestureMachine {
     return this.current;
   }
 
+  /** Share of the camera view, per axis, that reaches the whole screen. */
+  setActiveZone(size: number): void {
+    this.activeZone = size;
+  }
+
   update(timeMs: number, hands: MachineHand[]): void {
     if (hands.length > 0) this.lastHandSeenMs = timeMs;
 
@@ -58,11 +67,15 @@ export class GestureMachine {
       const stillHeld = hands.some(
         (hand) => hand.id === hold.handId && hand.pose === hold.pose,
       );
-      if (!stillHeld) this.hold = null;
+      if (!stillHeld) {
+        if (hold.pose === 'pinch') this.bus.emit({ type: 'pinch-end', timeMs });
+        this.hold = null;
+      }
     }
 
     if (!this.hold) this.hold = this.startHold(timeMs, hands);
     if (this.hold && !this.hold.done) this.finishHold(timeMs, this.hold);
+    if (this.hold?.pose === 'pinch') this.trackPinch(timeMs, this.hold, hands);
     this.detectFlicks(timeMs, hands);
 
     if (
@@ -93,18 +106,38 @@ export class GestureMachine {
     }
   }
 
-  private wantedPose(): Pose {
-    return this.current === 'asleep' ? 'open_palm' : 'fist';
+  /** Poses that can start a hold: a palm to wake, a fist or pinch once awake. */
+  private startingPoses(): Pose[] {
+    return this.current === 'asleep' ? ['open_palm'] : ['fist', 'pinch'];
+  }
+
+  private trackPinch(
+    timeMs: number,
+    hold: ActiveHold,
+    hands: MachineHand[],
+  ): void {
+    const hand = hands.find((candidate) => candidate.id === hold.handId);
+    if (!hand) return;
+    const point = mapToScreen(hand.pointer, this.activeZone);
+    const previous = hold.lastPoint;
+    hold.lastPoint = point;
+    if (!previous) {
+      this.bus.emit({ type: 'pinch-start', timeMs, x: point.x, y: point.y });
+      return;
+    }
+    const dx = point.x - previous.x;
+    const dy = point.y - previous.y;
+    if (dx !== 0 || dy !== 0) this.bus.emit({ type: 'pan', timeMs, dx, dy });
   }
 
   private startHold(timeMs: number, hands: MachineHand[]): ActiveHold | null {
     if (this.flicks.isLocked(timeMs)) return null;
-    const wanted = this.wantedPose();
+    const wanted = this.startingPoses();
     const hand = hands
-      .filter((candidate) => candidate.pose === wanted)
+      .filter((candidate) => wanted.includes(candidate.pose))
       .sort((a, b) => a.id - b.id)[0];
     if (!hand) return null;
-    return { handId: hand.id, pose: wanted, sinceMs: timeMs, done: false };
+    return { handId: hand.id, pose: hand.pose, sinceMs: timeMs, done: false };
   }
 
   private finishHold(timeMs: number, hold: ActiveHold): void {
@@ -116,6 +149,7 @@ export class GestureMachine {
       this.bus.emit({ type: 'wake', timeMs });
     } else if (
       this.current === 'armed' &&
+      hold.pose === 'fist' &&
       heldMs >= this.config.sleepFistHoldMs
     ) {
       hold.done = true;

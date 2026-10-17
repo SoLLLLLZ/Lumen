@@ -4,9 +4,16 @@ import { GestureMachine } from './gestureMachine';
 import type { PalmPoint } from './measurements';
 import type { Pose } from './types';
 
-type Hand = { id: number; pose: Pose; palm: PalmPoint };
+type Hand = {
+  id: number;
+  pose: Pose;
+  palm: PalmPoint;
+  pointer?: { x: number; y: number };
+};
 const STILL_PALM: PalmPoint = { x: 0.5, y: 0.5, size: 0.2 };
 const FRAME_MS = 33;
+
+const CENTER = { x: 0.5, y: 0.5 };
 
 function setup() {
   const bus = new EventBus();
@@ -18,7 +25,10 @@ function setup() {
   function hold(hands: Hand[], durationMs: number) {
     const end = now + durationMs;
     while (now < end) {
-      machine.update(now, hands);
+      machine.update(
+        now,
+        hands.map((hand) => ({ pointer: CENTER, ...hand })),
+      );
       now += FRAME_MS;
     }
   }
@@ -279,6 +289,111 @@ describe('GestureMachine', () => {
         );
       }
       expect(next(sim.events)).toEqual(['wake', 'next']);
+    });
+  });
+
+  describe('pinch and pan', () => {
+    const pinchAt = (x: number, y = 0.5, id = 0): Hand => ({
+      id,
+      pose: 'pinch',
+      palm: STILL_PALM,
+      pointer: { x, y },
+    });
+    const types = (events: GestureEvent[]) => events.map((e) => e.type);
+
+    it('ignores a pinch while asleep', () => {
+      const sim = setup();
+      sim.hold([pinchAt(0.4)], 500);
+      sim.hold([pinchAt(0.6)], 500);
+      expect(sim.events).toEqual([]);
+    });
+
+    it('starts a pinch where the hand is, mirrored onto the screen', () => {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      sim.hold([pinchAt(0.2, 0.35)], 100);
+      const start = sim.events.find((e) => e.type === 'pinch-start');
+      // Zone is 0.2 to 0.8 of the image: x 0.2 is the zone edge, mirrored to 1.
+      expect(start).toMatchObject({ x: 1, y: expect.closeTo(0.25, 10) });
+    });
+
+    it('pans by the change in mapped position and ends on release', () => {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      sim.hold([pinchAt(0.5)], FRAME_MS);
+      sim.hold([pinchAt(0.4)], FRAME_MS);
+      sim.hold([pinchAt(0.4, 0.6)], FRAME_MS);
+      sim.hold([palm()], FRAME_MS);
+      expect(types(sim.events)).toEqual([
+        'wake',
+        'pinch-start',
+        'pan',
+        'pan',
+        'pinch-end',
+      ]);
+      const pans = sim.events.filter((e) => e.type === 'pan');
+      // Hand moved left in the image by 0.1 = 1/6 of the zone; mirrored, that is rightward.
+      expect(pans[0]).toMatchObject({ dx: expect.closeTo(1 / 6, 5), dy: 0 });
+      expect(pans[1]).toMatchObject({ dx: 0, dy: expect.closeTo(1 / 6, 5) });
+    });
+
+    it('emits no pan while the pinch is still', () => {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      sim.hold([pinchAt(0.5)], 500);
+      expect(types(sim.events)).toEqual(['wake', 'pinch-start']);
+    });
+
+    it('does not sleep from a pinch held for over a second', () => {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      sim.hold([pinchAt(0.5)], 2500);
+      expect(sim.machine.state).toBe('armed');
+    });
+
+    it('ends the pinch when the hand leaves', () => {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      sim.hold([pinchAt(0.5)], 200);
+      sim.hold([], FRAME_MS);
+      expect(types(sim.events)).toEqual(['wake', 'pinch-start', 'pinch-end']);
+    });
+
+    it('lets a second hand neither pan nor start a gesture meanwhile', () => {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      sim.hold([pinchAt(0.5, 0.5, 0), pinchAt(0.3, 0.5, 1)], 300);
+      sim.hold([pinchAt(0.5, 0.5, 0), pinchAt(0.7, 0.5, 1)], 300);
+      expect(types(sim.events)).toEqual(['wake', 'pinch-start']);
+    });
+
+    it('never flicks while a pinch is held', () => {
+      const sim = setup();
+      sim.hold([palm(0)], 900);
+      sim.hold([pinchAt(0.5, 0.5, 0)], 100);
+      for (let i = 0; i <= 6; i++) {
+        sim.hold(
+          [
+            pinchAt(0.5, 0.5, 0),
+            {
+              id: 1,
+              pose: 'open_palm',
+              palm: { x: 0.2 + (0.5 * i) / 6, y: 0.5, size: 0.2 },
+            },
+          ],
+          FRAME_MS,
+        );
+      }
+      expect(types(sim.events)).toEqual(['wake', 'pinch-start']);
+    });
+
+    it('uses the adjusted zone size', () => {
+      const sim = setup();
+      sim.machine.setActiveZone(1);
+      sim.hold([palm()], 900);
+      sim.hold([pinchAt(0.25)], 100);
+      const start = sim.events.find((e) => e.type === 'pinch-start');
+      expect(start).toMatchObject({ x: expect.closeTo(0.75, 10) });
     });
   });
 });

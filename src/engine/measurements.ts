@@ -3,6 +3,7 @@ import type { Landmark } from './types';
 export const WRIST = 0;
 export const THUMB_TIP = 4;
 export const INDEX_MCP = 5;
+export const INDEX_TIP = 8;
 export const MIDDLE_MCP = 9;
 export const PINKY_MCP = 17;
 
@@ -79,4 +80,11 @@ export function palmPoint(landmarks: Landmark[], aspect: number): PalmPoint {
     y: knuckle.y / aspect,
     size: distance(knuckle, wrist, aspect),
   };
+}
+
+/** Midpoint between thumb tip and index tip, in image coordinates. */
+export function pinchPoint(landmarks: Landmark[]): Landmark {
+  const thumb = at(landmarks, THUMB_TIP);
+  const index = at(landmarks, INDEX_TIP);
+  return { x: (thumb.x + index.x) / 2, y: (thumb.y + index.y) / 2 };
 }

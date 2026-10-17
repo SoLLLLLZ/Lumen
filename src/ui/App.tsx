@@ -3,7 +3,13 @@ import { isClip } from '../engine/clip';
 import { replayEvents } from '../engine/replayer';
 import { EventBus, type GestureEvent } from '../engine/eventBus';
 import { POSES, type Pose } from '../engine/types';
+import {
+  DEFAULT_ACTIVE_ZONE,
+  MAX_ACTIVE_ZONE,
+  MIN_ACTIVE_ZONE,
+} from '../engine/pointer';
 import { Reader } from './Reader';
+import { useKeyboardMouse } from './useKeyboardMouse';
 import { useHandTracking, type TrackingPhase } from './useHandTracking';
 
 const PHASE_MESSAGES: Record<TrackingPhase, string> = {
@@ -29,11 +35,16 @@ function describeEvent(event: GestureEvent): string {
   if (event.type === 'wake') return 'wake';
   if (event.type === 'next') return 'next page';
   if (event.type === 'previous') return 'previous page';
+  if (event.type === 'pinch-start') return 'pinch start';
+  if (event.type === 'pinch-end') return 'pinch end';
+  if (event.type === 'pan') return 'pan';
   return `sleep (${event.reason === 'fist' ? 'fist held' : 'no hand'})`;
 }
 
 export function App() {
   const bus = useMemo(() => new EventBus(), []);
+  const [activeZone, setActiveZone] = useState(DEFAULT_ACTIVE_ZONE);
+  useKeyboardMouse(bus);
   const {
     videoRef,
     canvasRef,
@@ -48,7 +59,7 @@ export function App() {
     stopRecording,
     start,
     turnOff,
-  } = useHandTracking(bus);
+  } = useHandTracking(bus, activeZone);
   const [showDebug, setShowDebug] = useState(true);
   const [clipName, setClipName] = useState('');
   const [clipPose, setClipPose] = useState<Pose>('open_palm');
@@ -108,6 +119,19 @@ export function App() {
             <button onClick={toggleSkeleton} aria-pressed={showSkeleton}>
               {showSkeleton ? 'Hide hand overlay' : 'Show hand overlay'}
             </button>
+            <label>
+              Pointer zone {Math.round(activeZone * 100)}%{' '}
+              <input
+                type="range"
+                min={MIN_ACTIVE_ZONE * 100}
+                max={MAX_ACTIVE_ZONE * 100}
+                step={5}
+                value={Math.round(activeZone * 100)}
+                onChange={(event) =>
+                  setActiveZone(Number(event.target.value) / 100)
+                }
+              />
+            </label>
             <button
               onClick={() => setShowDebug((current) => !current)}
               aria-pressed={showDebug}
