@@ -150,8 +150,8 @@ export function useHandTracking(bus: EventBus, activeZone: number) {
     const sessionStartMs = performance.now();
     let events: LoggedEvent[] = [];
     bus.subscribe((event) => {
-      // Pans arrive every frame and would flood the log.
-      if (event.type === 'pan') return;
+      // Pans and zooms arrive every frame and would flood the log.
+      if (event.type === 'pan' || event.type === 'zoom') return;
       const atSeconds = (event.timeMs - sessionStartMs) / 1000;
       events = [...events, { event, atSeconds }].slice(-MAX_LOGGED_EVENTS);
     });

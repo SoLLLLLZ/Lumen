@@ -10,6 +10,9 @@ export interface Rect {
   bottom: number;
 }
 
+export const MIN_SCALE = 0.75;
+export const MAX_SCALE = 3;
+
 /** Strip on each side of the page that always counts as empty space. */
 export const GRAB_MARGIN_PX = 64;
 /** Least of the page that must stay on screen along each axis. */
@@ -86,6 +89,37 @@ export function clampPan(offset: Point, base: Rect, viewport: Rect): Point {
       viewport.top,
       viewport.bottom,
     ),
+  };
+}
+
+export interface View {
+  /** Pan offset in pixels, applied before the scale. */
+  x: number;
+  y: number;
+  scale: number;
+}
+
+export const DEFAULT_VIEW: View = { x: 0, y: 0, scale: 1 };
+
+/**
+ * Multiplies the zoom by factor, kept within the limits, so the page point
+ * under center stays put. origin is where the page's top left corner sits
+ * with no pan applied.
+ */
+export function zoomAbout(
+  view: View,
+  factor: number,
+  center: Point,
+  origin: Point,
+): View {
+  const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale * factor));
+  const ratio = scale / view.scale;
+  const fromOriginX = center.x - origin.x;
+  const fromOriginY = center.y - origin.y;
+  return {
+    scale,
+    x: fromOriginX - (fromOriginX - view.x) * ratio,
+    y: fromOriginY - (fromOriginY - view.y) * ratio,
   };
 }
 

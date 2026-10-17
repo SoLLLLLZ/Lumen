@@ -132,9 +132,18 @@ function specAt(track: HandTrack, timeMs: number, aspect: number): HandSpec {
     shift.x += move.dx * eased;
     shift.y += move.dy * eased * aspect;
   }
+  const fromThumb = from.target.thumb;
+  const toThumb = current.target.thumb;
+  let thumb = blend < 0.5 ? fromThumb : toThumb;
+  if (fromThumb.kind === 'spread' && toThumb.kind === 'spread') {
+    thumb = {
+      kind: 'spread',
+      open: fromThumb.open * (1 - blend) + toThumb.open * blend,
+    };
+  }
   return {
     curl,
-    thumb: blend < 0.5 ? from.target.thumb : current.target.thumb,
+    thumb,
     scale: track.scale,
     cx: track.cx + wobble + shift.x,
     cy: track.cy + wobble * 0.5 + shift.y,

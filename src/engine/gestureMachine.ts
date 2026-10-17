@@ -13,15 +13,27 @@ export interface MachineConfig {
   sleepFistHoldMs: number;
   /** No hand visible this long puts it to sleep. */
   noHandSleepMs: number;
+  /** A pinch shorter than this, barely moving, is a tap. */
+  tapMaxMs: number;
+  /** Two taps this close together reset the view. */
+  doubleTapMs: number;
 }
 
 export const DEFAULT_MACHINE_CONFIG: MachineConfig = {
   wakeHoldMs: 700,
   sleepFistHoldMs: 1000,
   noHandSleepMs: 3000,
+  tapMaxMs: 400,
+  doubleTapMs: 600,
 };
 
-type MachineHand = Pick<HandState, 'id' | 'pose' | 'palm' | 'pointer'>;
+/** Most a tap may move, as a fraction of the screen. */
+const TAP_TRAVEL = 0.05;
+
+type MachineHand = Pick<
+  HandState,
+  'id' | 'pose' | 'palm' | 'pointer' | 'pinchRatio'
+>;
 
 interface ActiveHold {
   handId: number;
@@ -30,6 +42,11 @@ interface ActiveHold {
   done: boolean;
   /** Where a pinch was last seen on screen. */
   lastPoint?: ScreenPoint;
+  /** Total distance moved by a pinch, in screen fractions. */
+  travel: number;
+  lastPalm?: { x: number; y: number };
+  /** Thumb to index gap during a V, as a fraction of hand width. */
+  lastSpread?: number;
 }
 
 /**
@@ -44,6 +61,7 @@ export class GestureMachine {
   private lastHandSeenMs = 0;
   private readonly flicks = new FlickDetector();
   private activeZone = DEFAULT_ACTIVE_ZONE;
+  private lastTapEndMs = Number.NEGATIVE_INFINITY;
 
   constructor(
     private readonly bus: EventBus,
@@ -68,7 +86,7 @@ export class GestureMachine {
         (hand) => hand.id === hold.handId && hand.pose === hold.pose,
       );
       if (!stillHeld) {
-        if (hold.pose === 'pinch') this.bus.emit({ type: 'pinch-end', timeMs });
+        if (hold.pose === 'pinch') this.endPinch(timeMs, hold);
         this.hold = null;
       }
     }
@@ -76,6 +94,7 @@ export class GestureMachine {
     if (!this.hold) this.hold = this.startHold(timeMs, hands);
     if (this.hold && !this.hold.done) this.finishHold(timeMs, this.hold);
     if (this.hold?.pose === 'pinch') this.trackPinch(timeMs, this.hold, hands);
+    if (this.hold?.pose === 'v') this.trackSpread(timeMs, this.hold, hands);
     this.detectFlicks(timeMs, hands);
 
     if (
@@ -106,9 +125,46 @@ export class GestureMachine {
     }
   }
 
-  /** Poses that can start a hold: a palm to wake, a fist or pinch once awake. */
+  /** Poses that can start a hold: a palm to wake, a fist, pinch or V once awake. */
+  private endPinch(timeMs: number, hold: ActiveHold): void {
+    this.bus.emit({ type: 'pinch-end', timeMs });
+    const isTap =
+      timeMs - hold.sinceMs <= this.config.tapMaxMs &&
+      hold.travel <= TAP_TRAVEL;
+    if (!isTap) {
+      this.lastTapEndMs = Number.NEGATIVE_INFINITY;
+    } else if (hold.sinceMs - this.lastTapEndMs <= this.config.doubleTapMs) {
+      this.lastTapEndMs = Number.NEGATIVE_INFINITY;
+      this.bus.emit({ type: 'reset-view', timeMs });
+    } else {
+      this.lastTapEndMs = timeMs;
+    }
+  }
+
+  private trackSpread(
+    timeMs: number,
+    hold: ActiveHold,
+    hands: MachineHand[],
+  ): void {
+    const hand = hands.find((candidate) => candidate.id === hold.handId);
+    if (!hand || !Number.isFinite(hand.pinchRatio) || hand.pinchRatio <= 0) {
+      return;
+    }
+    const previous = hold.lastSpread;
+    hold.lastSpread = hand.pinchRatio;
+    if (previous === undefined || previous === hand.pinchRatio) return;
+    const center = mapToScreen(hand.pointer, this.activeZone);
+    this.bus.emit({
+      type: 'zoom',
+      timeMs,
+      factor: hand.pinchRatio / previous,
+      x: center.x,
+      y: center.y,
+    });
+  }
+
   private startingPoses(): Pose[] {
-    return this.current === 'asleep' ? ['open_palm'] : ['fist', 'pinch'];
+    return this.current === 'asleep' ? ['open_palm'] : ['fist', 'pinch', 'v'];
   }
 
   private trackPinch(
@@ -127,6 +183,16 @@ export class GestureMachine {
     }
     const dx = point.x - previous.x;
     const dy = point.y - previous.y;
+    // Tap travel follows the palm: the pointer jumps when the fingers open.
+    const lastPalm = hold.lastPalm;
+    hold.lastPalm = hand.palm;
+    if (lastPalm) {
+      const palmMove = Math.hypot(
+        hand.palm.x - lastPalm.x,
+        hand.palm.y - lastPalm.y,
+      );
+      hold.travel += palmMove / this.activeZone;
+    }
     if (dx !== 0 || dy !== 0) this.bus.emit({ type: 'pan', timeMs, dx, dy });
   }
 
@@ -137,7 +203,13 @@ export class GestureMachine {
       .filter((candidate) => wanted.includes(candidate.pose))
       .sort((a, b) => a.id - b.id)[0];
     if (!hand) return null;
-    return { handId: hand.id, pose: hand.pose, sinceMs: timeMs, done: false };
+    return {
+      handId: hand.id,
+      pose: hand.pose,
+      sinceMs: timeMs,
+      done: false,
+      travel: 0,
+    };
   }
 
   private finishHold(timeMs: number, hold: ActiveHold): void {

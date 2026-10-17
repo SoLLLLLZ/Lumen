@@ -1,7 +1,11 @@
 import type { Landmark } from '../engine/types';
 
 export type ThumbSpec =
-  { kind: 'out' } | { kind: 'tucked' } | { kind: 'pinch'; gap: number };
+  | { kind: 'out' }
+  | { kind: 'tucked' }
+  | { kind: 'pinch'; gap: number }
+  /** Thumb pointing up (open 0) to straight out to the side (open 1). */
+  | { kind: 'spread'; open: number };
 
 export interface HandSpec {
   /** Curl 0 (straight) to 1 (folded) for index, middle, ring, pinky. */
@@ -58,6 +62,20 @@ function thumbPoints(thumb: ThumbSpec, indexTip: Point): Point[] {
   }
   if (thumb.kind === 'tucked') {
     return [cmc, [-0.55, 0.4], [-0.3, 0.5], [-0.1, 0.65]];
+  }
+  if (thumb.kind === 'spread') {
+    const base: Point = [-0.6, 0.5];
+    const angle = (Math.PI / 2) * (1 + thumb.open);
+    const reach = 0.64;
+    const end: Point = [
+      base[0] + Math.cos(angle) * reach,
+      base[1] + Math.sin(angle) * reach,
+    ];
+    const middle: Point = [
+      base[0] + (end[0] - base[0]) * 0.55,
+      base[1] + (end[1] - base[1]) * 0.55,
+    ];
+    return [cmc, base, middle, end];
   }
   const tip: Point = [indexTip[0] + thumb.gap, indexTip[1] - thumb.gap * 0.3];
   const mcp: Point = [-0.6, 0.5];

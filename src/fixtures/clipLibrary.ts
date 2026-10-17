@@ -448,6 +448,105 @@ function panClip(index: number): Clip {
   });
 }
 
+const ZOOM_START_MS = 1500;
+const ZOOM_STEP_MS = 100;
+const ZOOM_STEPS = 10;
+const ZOOM_RELEASE_MS = 3200;
+const OPEN_NARROW = 0.15;
+const OPEN_WIDE = 1;
+
+type ZoomKind = 'spread' | 'close' | 'asleep';
+const ZOOM_KINDS: ZoomKind[] = ['spread', 'close', 'asleep'];
+
+/** A V held steady, with the thumb moving away from or toward the index finger. */
+function zoomClip(index: number): Clip {
+  const kind = ZOOM_KINDS[index] as ZoomKind;
+  const seed = 9800 + index;
+  const rng = seededRng(seed);
+  const name = `zoom-${String(index).padStart(2, '0')}`;
+  const vStart = kind === 'asleep' ? PAN_ASLEEP_PINCH_MS : ZOOM_START_MS;
+  const from = kind === 'close' ? OPEN_WIDE : OPEN_NARROW;
+  const to = kind === 'close' ? OPEN_NARROW : OPEN_WIDE;
+  const vTarget = poseTarget('v', rng);
+  const withOpen = (open: number) => ({
+    ...vTarget,
+    thumb: { kind: 'spread' as const, open },
+  });
+  const steps = Array.from({ length: ZOOM_STEPS + 1 }, (_, i) => ({
+    fromMs: vStart + 200 + i * ZOOM_STEP_MS,
+    target: withOpen(from + ((to - from) * i) / ZOOM_STEPS),
+  }));
+  const palm = poseTarget('open_palm', rng);
+  const hand: HandTrack = {
+    scale: 0.17,
+    cx: 0.5,
+    cy: 0.9,
+    rotation: 0,
+    mirror: false,
+    drift: 0,
+    segments: [
+      { fromMs: 0, target: palm },
+      { fromMs: vStart, target: withOpen(from) },
+      ...steps,
+      { fromMs: ZOOM_RELEASE_MS, target: palm },
+    ],
+  };
+  return buildClip({
+    name,
+    category: 'zoom',
+    fps: 30,
+    seed,
+    noise: 0.001,
+    durationMs: 4000,
+    tracks: [hand],
+    expected: [],
+    expectedEvents: kind === 'asleep' ? [] : ['wake', 'zoom'],
+  });
+}
+
+/** Two quick pinch taps in a row reset the view. */
+function doubleTapClip(): Clip {
+  const seed = 9900;
+  const rng = seededRng(seed);
+  const palm = poseTarget('open_palm', rng);
+  const pinch = poseTarget('pinch', rng);
+  const hand: HandTrack = {
+    scale: 0.17,
+    cx: 0.8,
+    cy: 0.9,
+    rotation: 0,
+    mirror: false,
+    drift: 0,
+    segments: [
+      { fromMs: 0, target: palm },
+      { fromMs: 1500, target: pinch },
+      { fromMs: 1850, target: palm },
+      { fromMs: 2200, target: pinch },
+      { fromMs: 2550, target: palm },
+    ],
+  };
+  return buildClip({
+    name: 'double-pinch-00',
+    category: 'pan',
+    fps: 30,
+    seed,
+    noise: 0.001,
+    durationMs: 3600,
+    tracks: [hand],
+    expected: [],
+    expectedEvents: [
+      'wake',
+      'pinch-start',
+      'pan',
+      'pinch-end',
+      'pinch-start',
+      'pan',
+      'pinch-end',
+      'reset-view',
+    ],
+  });
+}
+
 export function buildClipLibrary(): Clip[] {
   const clips: Clip[] = [];
   for (const gesture of GESTURES) {
@@ -472,5 +571,9 @@ export function buildClipLibrary(): Clip[] {
   for (let i = 0; i < PAN_PLANS.length; i++) {
     clips.push(panClip(i));
   }
+  for (let i = 0; i < ZOOM_KINDS.length; i++) {
+    clips.push(zoomClip(i));
+  }
+  clips.push(doubleTapClip());
   return clips;
 }

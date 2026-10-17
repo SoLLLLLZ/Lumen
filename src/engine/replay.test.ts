@@ -59,10 +59,13 @@ describe('clip library', () => {
 
       it('emits exactly the expected events', () => {
         if (!clip.expectedEvents) return;
-        // A drag emits a pan every frame, so a run of pans counts as one.
+        // A drag or V hold emits every frame, so a run of pans or zooms counts as one.
         const types = replayEvents(clip)
           .map((event) => event.type)
-          .filter((type, i, all) => type !== 'pan' || all[i - 1] !== 'pan');
+          .filter(
+            (type, i, all) =>
+              (type !== 'pan' && type !== 'zoom') || all[i - 1] !== type,
+          );
         expect(types).toEqual(clip.expectedEvents);
       });
 
