@@ -49,6 +49,37 @@ test('model loads, tracking runs and the debug view reports live numbers', async
     expect(fps).toBeGreaterThan(0);
   }).toPass({ timeout: 10_000 });
   await expect(page.getByTestId('hands')).toHaveText('0');
+  await expect(page.getByTestId('poses')).toHaveText('no hand');
+});
+
+test('the recorder saves a clip file with the chosen name and pose', async ({
+  page,
+}) => {
+  await startTracking(page);
+
+  await page.getByLabel('Clip name').fill('fist-e2e');
+  await page.getByLabel('Pose held the whole time').selectOption('fist');
+  await page.getByRole('button', { name: 'Record clip' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Stop and save clip' }),
+  ).toBeVisible();
+  await page.waitForTimeout(1000);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Stop and save clip' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('fist-e2e.json');
+
+  const clip = JSON.parse(
+    await (
+      await import('node:fs/promises')
+    ).readFile((await download.path()) as string, 'utf8'),
+  );
+  expect(clip.version).toBe(1);
+  expect(clip.name).toBe('fist-e2e');
+  expect(clip.expected[0].pose).toBe('fist');
+  expect(clip.frames.length).toBeGreaterThan(5);
+  expect(clip.frames[0].t).toBe(0);
 });
 
 test('the hand overlay and debug view can be hidden', async ({ page }) => {

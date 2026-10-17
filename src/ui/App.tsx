@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { POSES, type Pose } from '../engine/types';
 import { useHandTracking, type TrackingPhase } from './useHandTracking';
 
 const PHASE_MESSAGES: Record<TrackingPhase, string> = {
@@ -12,6 +13,14 @@ const PHASE_MESSAGES: Record<TrackingPhase, string> = {
   error: 'The camera or hand tracking could not start. Try again.',
 };
 
+const POSE_LABELS: Record<Pose, string> = {
+  open_palm: 'Open palm',
+  pinch: 'Pinch',
+  v: 'V pose',
+  fist: 'Fist',
+  none: 'No pose',
+};
+
 export function App() {
   const {
     videoRef,
@@ -22,10 +31,15 @@ export function App() {
     stats,
     showSkeleton,
     toggleSkeleton,
+    recording,
+    startRecording,
+    stopRecording,
     start,
     turnOff,
   } = useHandTracking();
   const [showDebug, setShowDebug] = useState(true);
+  const [clipName, setClipName] = useState('');
+  const [clipPose, setClipPose] = useState<Pose>('open_palm');
 
   const isRunning = phase === 'running';
   const canStart =
@@ -96,9 +110,81 @@ export function App() {
                   .join(', ')
               : 'no hand'}
           </dd>
+          <dt>Pose</dt>
+          <dd data-testid="poses">
+            {stats.hands.length > 0
+              ? stats.hands
+                  .map(
+                    (hand, index) =>
+                      `Hand ${index + 1}: ${POSE_LABELS[hand.pose]}`,
+                  )
+                  .join('; ')
+              : 'no hand'}
+          </dd>
+          <dt>Pinch gap</dt>
+          <dd>
+            {stats.hands.length > 0
+              ? stats.hands
+                  .map((hand) => `${Math.round(hand.pinchRatio * 100)}%`)
+                  .join(', ')
+              : 'no hand'}
+          </dd>
+          <dt>Finger extension</dt>
+          <dd>
+            {stats.hands.length > 0
+              ? stats.hands
+                  .map((hand) =>
+                    Object.values(hand.extensions)
+                      .map((value) => value.toFixed(2))
+                      .join(' '),
+                  )
+                  .join('; ')
+              : 'no hand'}
+          </dd>
           <dt>Backend</dt>
           <dd>{delegate === 'GPU' ? 'GPU' : 'CPU (GPU unavailable)'}</dd>
         </dl>
+      )}
+
+      {isRunning && showDebug && (
+        <form
+          className="recorder"
+          aria-label="Clip recorder"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (recording) {
+              stopRecording();
+            } else if (clipName.trim() !== '') {
+              startRecording(clipName.trim(), clipPose);
+            }
+          }}
+        >
+          <label>
+            Clip name{' '}
+            <input
+              value={clipName}
+              onChange={(event) => setClipName(event.target.value)}
+              disabled={recording}
+            />
+          </label>
+          <label>
+            Pose held the whole time{' '}
+            <select
+              value={clipPose}
+              onChange={(event) => setClipPose(event.target.value as Pose)}
+              disabled={recording}
+            >
+              {POSES.map((pose) => (
+                <option key={pose} value={pose}>
+                  {POSE_LABELS[pose]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" disabled={!recording && clipName.trim() === ''}>
+            {recording ? 'Stop and save clip' : 'Record clip'}
+          </button>
+        </form>
       )}
     </main>
   );

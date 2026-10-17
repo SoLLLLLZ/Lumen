@@ -1,16 +1,7 @@
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+import type { TrackedHand } from '../engine/types';
 
 export type Delegate = 'GPU' | 'CPU';
-
-export interface Landmark {
-  x: number;
-  y: number;
-}
-
-export interface TrackedHand {
-  landmarks: Landmark[];
-  confidence: number;
-}
 
 export interface HandTracker {
   delegate: Delegate;

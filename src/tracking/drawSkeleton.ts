@@ -1,4 +1,5 @@
-import { HAND_CONNECTIONS, type TrackedHand } from './handTracker';
+import type { TrackedHand } from '../engine/types';
+import { HAND_CONNECTIONS } from './handTracker';
 
 export function clearCanvas(canvas: HTMLCanvasElement): void {
   canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
