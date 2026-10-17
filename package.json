@@ -7,10 +7,12 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "format": "prettier --write src e2e .github index.html package.json tsconfig.json .prettierrc \"*.ts\" \"*.js\"",
-    "format:check": "prettier --check src e2e .github index.html package.json tsconfig.json .prettierrc \"*.ts\" \"*.js\"",
+    "format": "prettier --write src e2e scripts .github index.html package.json tsconfig.json .prettierrc \"*.ts\" \"*.js\"",
+    "format:check": "prettier --check src e2e scripts .github index.html package.json tsconfig.json .prettierrc \"*.ts\" \"*.js\"",
     "test": "vitest run --reporter=verbose",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "predev": "node scripts/copy-wasm.mjs",
+    "prebuild": "node scripts/copy-wasm.mjs"
   },
   "repository": {
     "type": "git",
@@ -22,6 +24,7 @@
   },
   "homepage": "https://github.com/SoLLLLLZ/Lumen#readme",
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.1.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

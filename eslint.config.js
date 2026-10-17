@@ -14,6 +14,10 @@ export default tseslint.config(
     rules: reactHooks.configs.recommended.rules,
   },
   {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: { globals: globals.node },
+  },
+  {
     // The engine must stay free of UI and DOM code so it can be tested in Node.
     files: ['src/engine/**/*.ts'],
     languageOptions: { globals: globals.node },
