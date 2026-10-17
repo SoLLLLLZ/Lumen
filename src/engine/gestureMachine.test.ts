@@ -9,6 +9,7 @@ type Hand = {
   pose: Pose;
   palm: PalmPoint;
   pointer?: { x: number; y: number };
+  pinchRatio?: number;
 };
 const STILL_PALM: PalmPoint = { x: 0.5, y: 0.5, size: 0.2 };
 const FRAME_MS = 33;
@@ -27,7 +28,7 @@ function setup() {
     while (now < end) {
       machine.update(
         now,
-        hands.map((hand) => ({ pointer: CENTER, ...hand })),
+        hands.map((hand) => ({ pointer: CENTER, pinchRatio: 1, ...hand })),
       );
       now += FRAME_MS;
     }
@@ -394,6 +395,131 @@ describe('GestureMachine', () => {
       sim.hold([pinchAt(0.25)], 100);
       const start = sim.events.find((e) => e.type === 'pinch-start');
       expect(start).toMatchObject({ x: expect.closeTo(0.75, 10) });
+    });
+  });
+  describe('zoom and reset', () => {
+    const vAt = (pinchRatio: number, x = 0.5, y = 0.5, id = 0): Hand => ({
+      id,
+      pose: 'v',
+      palm: STILL_PALM,
+      pointer: { x, y },
+      pinchRatio,
+    });
+    const pinchHand = (travel = 0): Hand => ({
+      id: 0,
+      pose: 'pinch',
+      palm: { x: 0.5 + travel, y: 0.5, size: 0.2 },
+    });
+    const zooms = (events: GestureEvent[]) =>
+      events.filter((e) => e.type === 'zoom');
+    const resets = (events: GestureEvent[]) =>
+      events.filter((e) => e.type === 'reset-view');
+
+    function awake() {
+      const sim = setup();
+      sim.hold([palm()], 900);
+      return sim;
+    }
+
+    it('ignores a V while asleep', () => {
+      const sim = setup();
+      sim.hold([vAt(0.5)], 300);
+      sim.hold([vAt(1)], 300);
+      expect(sim.events).toEqual([]);
+    });
+
+    it('zooms by the change in spread, around the fingertips', () => {
+      const sim = awake();
+      sim.hold([vAt(0.5, 0.4, 0.5)], 100);
+      sim.hold([vAt(1, 0.4, 0.5)], FRAME_MS);
+      const [zoom] = zooms(sim.events);
+      expect(zoom).toMatchObject({
+        factor: expect.closeTo(2, 10),
+        x: expect.closeTo(2 / 3, 10),
+        y: expect.closeTo(0.5, 10),
+      });
+    });
+
+    it('zooms out when the spread closes', () => {
+      const sim = awake();
+      sim.hold([vAt(1)], 100);
+      sim.hold([vAt(0.8)], FRAME_MS);
+      expect(zooms(sim.events)[0]).toMatchObject({
+        factor: expect.closeTo(0.8, 10),
+      });
+    });
+
+    it('emits nothing for a steady V', () => {
+      const sim = awake();
+      sim.hold([vAt(0.7)], 500);
+      expect(zooms(sim.events)).toEqual([]);
+    });
+
+    it('does not pan or zoom a second hand while one V is held', () => {
+      const sim = awake();
+      sim.hold([vAt(0.5, 0.5, 0.5, 0), vAt(0.5, 0.2, 0.5, 1)], 100);
+      sim.hold([vAt(0.5, 0.5, 0.5, 0), vAt(1, 0.2, 0.5, 1)], 300);
+      expect(zooms(sim.events)).toEqual([]);
+    });
+
+    it('does not turn a V into a pan', () => {
+      const sim = awake();
+      sim.hold([vAt(0.5, 0.3)], 100);
+      sim.hold([vAt(0.5, 0.6)], 300);
+      expect(sim.events.map((e) => e.type)).toEqual(['wake']);
+    });
+
+    it('resets the view on two quick taps', () => {
+      const sim = awake();
+      sim.hold([pinchHand()], 200);
+      sim.hold([palm()], 150);
+      sim.hold([pinchHand()], 200);
+      sim.hold([palm()], FRAME_MS);
+      expect(resets(sim.events)).toHaveLength(1);
+    });
+
+    it('does not reset after a single tap', () => {
+      const sim = awake();
+      sim.hold([pinchHand()], 200);
+      sim.hold([palm()], 1500);
+      expect(resets(sim.events)).toEqual([]);
+    });
+
+    it('does not reset when the taps are too far apart', () => {
+      const sim = awake();
+      sim.hold([pinchHand()], 200);
+      sim.hold([palm()], 900);
+      sim.hold([pinchHand()], 200);
+      sim.hold([palm()], FRAME_MS);
+      expect(resets(sim.events)).toEqual([]);
+    });
+
+    it('does not count a long pinch as a tap', () => {
+      const sim = awake();
+      sim.hold([pinchHand()], 200);
+      sim.hold([palm()], 150);
+      sim.hold([pinchHand()], 900);
+      sim.hold([palm()], FRAME_MS);
+      expect(resets(sim.events)).toEqual([]);
+    });
+
+    it('does not count a pinch that moved as a tap', () => {
+      const sim = awake();
+      sim.hold([pinchHand()], 200);
+      sim.hold([palm()], 150);
+      sim.hold([pinchHand()], 100);
+      sim.hold([pinchHand(0.1)], 100);
+      sim.hold([palm()], FRAME_MS);
+      expect(resets(sim.events)).toEqual([]);
+    });
+
+    it('needs the second tap to follow the first, not a third', () => {
+      const sim = awake();
+      for (let i = 0; i < 3; i++) {
+        sim.hold([pinchHand()], 200);
+        sim.hold([palm()], 150);
+      }
+      expect(resets(sim.events)).toHaveLength(1);
     });
   });
 });

@@ -10,11 +10,14 @@ import { aliceBook, aliceWords } from '../reader/alice';
 import { loadWordIndex, savePosition } from '../reader/position';
 import { pageContaining, paginate, type Page } from '../reader/paginate';
 import {
+  DEFAULT_VIEW,
   PanSession,
   clampPan,
   isEmptySpace,
+  zoomAbout,
   type Point,
   type Rect,
+  type View,
 } from '../reader/view';
 import { measureWithDom, renderWords } from '../reader/renderPage';
 
@@ -42,7 +45,7 @@ export function Reader({ bus }: { bus: EventBus }) {
   const pageRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
-  const panRef = useRef<Point>({ x: 0, y: 0 });
+  const viewRef = useRef<View>(DEFAULT_VIEW);
   const panSession = useRef(new PanSession());
   const [pages, setPages] = useState<Page[]>(FALLBACK_PAGE);
   const [pageIndex, setPageIndex] = useState(0);
@@ -114,7 +117,9 @@ export function Reader({ bus }: { bus: EventBus }) {
     if (!frame || !text) return;
     const textRect = text.getBoundingClientRect();
     const style = getComputedStyle(text);
-    const pad = (value: string) => parseFloat(value) || 0;
+    // Padding is drawn at the current zoom.
+    const zoom = text.offsetWidth > 0 ? textRect.width / text.offsetWidth : 1;
+    const pad = (value: string) => (parseFloat(value) || 0) * zoom;
     const empty = isEmptySpace(point, {
       page: frame.getBoundingClientRect(),
       text: {
@@ -129,26 +134,55 @@ export function Reader({ bus }: { bus: EventBus }) {
     document.body.classList.toggle('panning', empty);
   }, []);
 
-  const panBy = useCallback((delta: Point) => {
-    const frame = frameRef.current;
-    const move = panSession.current.move(delta);
-    if (!frame || !move) return;
+  /** Where the page's top left corner sits with no pan applied. */
+  const pageOrigin = useCallback((frame: HTMLElement): Point => {
     const shown = frame.getBoundingClientRect();
-    const current = panRef.current;
-    const base: Rect = {
-      left: shown.left - current.x,
-      top: shown.top - current.y,
-      right: shown.right - current.x,
-      bottom: shown.bottom - current.y,
+    return {
+      x: shown.left - viewRef.current.x,
+      y: shown.top - viewRef.current.y,
     };
-    const next = clampPan(
-      { x: current.x + move.x, y: current.y + move.y },
-      base,
-      viewportRect(),
-    );
-    panRef.current = next;
-    frame.style.transform = `translate(${next.x}px, ${next.y}px)`;
   }, []);
+
+  const showView = useCallback(
+    (wanted: View) => {
+      const frame = frameRef.current;
+      if (!frame) return;
+      const origin = pageOrigin(frame);
+      const base: Rect = {
+        left: origin.x,
+        top: origin.y,
+        right: origin.x + frame.offsetWidth * wanted.scale,
+        bottom: origin.y + frame.offsetHeight * wanted.scale,
+      };
+      const moved = clampPan(wanted, base, viewportRect());
+      const next = { ...moved, scale: wanted.scale };
+      viewRef.current = next;
+      frame.style.transform = `translate(${next.x}px, ${next.y}px) scale(${next.scale})`;
+      const isDefault =
+        next.x === 0 && next.y === 0 && next.scale === DEFAULT_VIEW.scale;
+      document.documentElement.classList.toggle('view-moved', !isDefault);
+    },
+    [pageOrigin],
+  );
+
+  const panBy = useCallback(
+    (delta: Point) => {
+      const move = panSession.current.move(delta);
+      if (!move) return;
+      const current = viewRef.current;
+      showView({ ...current, x: current.x + move.x, y: current.y + move.y });
+    },
+    [showView],
+  );
+
+  const zoomBy = useCallback(
+    (factor: number, center: Point) => {
+      const frame = frameRef.current;
+      if (!frame) return;
+      showView(zoomAbout(viewRef.current, factor, center, pageOrigin(frame)));
+    },
+    [pageOrigin, showView],
+  );
 
   useEffect(
     () =>
@@ -171,8 +205,15 @@ export function Reader({ bus }: { bus: EventBus }) {
           panSession.current.end();
           document.body.classList.remove('panning');
         }
+        if (event.type === 'zoom') {
+          zoomBy(event.factor, {
+            x: event.x * window.innerWidth,
+            y: event.y * window.innerHeight,
+          });
+        }
+        if (event.type === 'reset-view') showView(DEFAULT_VIEW);
       }),
-    [bus, turn, startPinch, panBy],
+    [bus, turn, startPinch, panBy, zoomBy, showView],
   );
 
   useEffect(() => {

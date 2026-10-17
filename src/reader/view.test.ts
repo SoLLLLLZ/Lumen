@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   clampPan,
   isEmptySpace,
+  MAX_SCALE,
+  MIN_SCALE,
   PanSession,
+  zoomAbout,
   type HitLayout,
   type Rect,
 } from './view';
@@ -100,5 +103,44 @@ describe('PanSession', () => {
     session.end();
     expect(session.mode).toBe('idle');
     expect(session.move({ x: 1, y: 2 })).toBeNull();
+  });
+});
+
+describe('zoomAbout', () => {
+  const origin = { x: 100, y: 50 };
+  const start = { x: 0, y: 0, scale: 1 };
+
+  it('multiplies the scale', () => {
+    expect(zoomAbout(start, 2, origin, origin).scale).toBe(2);
+  });
+
+  it('stops at the zoom limits', () => {
+    expect(MAX_SCALE).toBe(3);
+    expect(MIN_SCALE).toBe(0.75);
+    expect(zoomAbout(start, 100, origin, origin).scale).toBe(3);
+    expect(zoomAbout(start, 0.001, origin, origin).scale).toBe(0.75);
+    const atMax = { ...start, scale: MAX_SCALE };
+    expect(zoomAbout(atMax, 2, origin, origin)).toEqual(atMax);
+  });
+
+  it('keeps the point under the fingertips fixed', () => {
+    const center = { x: 400, y: 300 };
+    const view = { x: 20, y: -10, scale: 1.5 };
+    const next = zoomAbout(view, 2, center, origin);
+    // A page point under the center before zooming.
+    const pagePoint = {
+      x: (center.x - origin.x - view.x) / view.scale,
+      y: (center.y - origin.y - view.y) / view.scale,
+    };
+    expect(origin.x + next.x + pagePoint.x * next.scale).toBeCloseTo(center.x);
+    expect(origin.y + next.y + pagePoint.y * next.scale).toBeCloseTo(center.y);
+  });
+
+  it('leaves the page where it is when zooming about its corner', () => {
+    expect(zoomAbout(start, 2, origin, origin)).toEqual({
+      x: 0,
+      y: 0,
+      scale: 2,
+    });
   });
 });

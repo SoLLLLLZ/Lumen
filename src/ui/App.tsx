@@ -38,6 +38,8 @@ function describeEvent(event: GestureEvent): string {
   if (event.type === 'pinch-start') return 'pinch start';
   if (event.type === 'pinch-end') return 'pinch end';
   if (event.type === 'pan') return 'pan';
+  if (event.type === 'zoom') return 'zoom';
+  if (event.type === 'reset-view') return 'reset view';
   return `sleep (${event.reason === 'fist' ? 'fist held' : 'no hand'})`;
 }
 

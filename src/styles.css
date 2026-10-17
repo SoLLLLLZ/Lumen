@@ -69,6 +69,7 @@ main {
 
 .page-frame {
   position: relative;
+  transform-origin: 0 0;
 }
 
 .page {
@@ -115,4 +116,13 @@ main {
 body.panning {
   user-select: none;
   cursor: grabbing;
+}
+
+/* A panned or zoomed page may reach past the window; do not add scrollbars. */
+html {
+  scrollbar-gutter: stable;
+}
+
+html.view-moved {
+  overflow: hidden;
 }
