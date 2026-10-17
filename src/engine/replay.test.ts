@@ -59,9 +59,11 @@ describe('clip library', () => {
 
       it('emits exactly the expected events', () => {
         if (!clip.expectedEvents) return;
-        expect(replayEvents(clip).map((event) => event.type)).toEqual(
-          clip.expectedEvents,
-        );
+        // A drag emits a pan every frame, so a run of pans counts as one.
+        const types = replayEvents(clip)
+          .map((event) => event.type)
+          .filter((type, i, all) => type !== 'pan' || all[i - 1] !== 'pan');
+        expect(types).toEqual(clip.expectedEvents);
       });
 
       it('does not flicker within 300 ms while a pose is held', () => {

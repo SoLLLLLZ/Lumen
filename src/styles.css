@@ -111,3 +111,8 @@ main {
   display: block;
   margin: 1rem 0 0.5rem;
 }
+
+body.panning {
+  user-select: none;
+  cursor: grabbing;
+}

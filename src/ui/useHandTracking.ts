@@ -68,13 +68,14 @@ interface Session {
   end: () => void;
 }
 
-export function useHandTracking(bus: EventBus) {
+export function useHandTracking(bus: EventBus, activeZone: number) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const trackerRef = useRef<HandTracker | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const recordingRef = useRef<ActiveRecording | null>(null);
   const showSkeletonRef = useRef(true);
+  const activeZoneRef = useRef(activeZone);
 
   const [model, setModel] = useState<ModelState>({
     status: 'loading',
@@ -89,6 +90,10 @@ export function useHandTracking(bus: EventBus) {
   useEffect(() => {
     showSkeletonRef.current = showSkeleton;
   }, [showSkeleton]);
+
+  useEffect(() => {
+    activeZoneRef.current = activeZone;
+  }, [activeZone]);
 
   // Preload the model at startup so the first camera start is not delayed.
   useEffect(() => {
@@ -145,6 +150,8 @@ export function useHandTracking(bus: EventBus) {
     const sessionStartMs = performance.now();
     let events: LoggedEvent[] = [];
     bus.subscribe((event) => {
+      // Pans arrive every frame and would flood the log.
+      if (event.type === 'pan') return;
       const atSeconds = (event.timeMs - sessionStartMs) / 1000;
       events = [...events, { event, atSeconds }].slice(-MAX_LOGGED_EVENTS);
     });
@@ -163,6 +170,7 @@ export function useHandTracking(bus: EventBus) {
           frameStats.record(finishedAt, finishedAt - startedAt);
           recordingRef.current?.recorder.add(startedAt, raw);
           latestHands = engine.process(startedAt, raw);
+          machine.setActiveZone(activeZoneRef.current);
           machine.update(startedAt, latestHands);
         } catch {
           stop('error');

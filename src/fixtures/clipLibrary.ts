@@ -376,6 +376,78 @@ function stateClip(index: number): Clip {
   });
 }
 
+const PAN_PINCH_MS = 1500;
+/** Too soon after raising the palm to have woken the system. */
+const PAN_ASLEEP_PINCH_MS = 400;
+const PAN_RELEASE_MS = 3000;
+
+interface PanPlan {
+  /** Hand position in the image, in image widths. */
+  cx: number;
+  cy: number;
+  /** Raw image movement of the hand while pinching. */
+  dx: number;
+  dy: number;
+  wakes: boolean;
+}
+
+/** Pan drags, one per scenario. */
+const PAN_PLANS: PanPlan[] = [
+  // Starts on the left background (screen), drags rightward on screen.
+  { cx: 0.8, cy: 0.9, dx: -0.12, dy: 0, wakes: true },
+  // Starts on the left background and crosses the text: the mode must stay pan.
+  { cx: 0.8, cy: 0.9, dx: -0.3, dy: 0.1, wakes: true },
+  // Starts on the middle of the text and drifts out: nothing may pan.
+  { cx: 0.59, cy: 0.9, dx: 0.3, dy: 0, wakes: true },
+  // Asleep: the pinch does nothing at all.
+  { cx: 0.8, cy: 0.9, dx: -0.12, dy: 0, wakes: false },
+];
+
+function panClip(index: number): Clip {
+  const plan = PAN_PLANS[index] as PanPlan;
+  const seed = 9700 + index;
+  const rng = seededRng(seed);
+  const name = `pan-${String(index).padStart(2, '0')}`;
+  const pinchMs = plan.wakes ? PAN_PINCH_MS : PAN_ASLEEP_PINCH_MS;
+  const hand = track(
+    rng,
+    [
+      { pose: 'open_palm', fromMs: 0 },
+      { pose: 'pinch', fromMs: pinchMs },
+      { pose: 'open_palm', fromMs: PAN_RELEASE_MS },
+    ],
+    {
+      scale: 0.17,
+      cx: plan.cx,
+      cy: plan.cy,
+      rotation: 0,
+      mirror: false,
+      drift: 0,
+      moves: [
+        {
+          fromMs: pinchMs + 500,
+          toMs: pinchMs + 1200,
+          dx: plan.dx,
+          dy: plan.dy,
+        },
+      ],
+    },
+  );
+  return buildClip({
+    name,
+    category: 'pan',
+    fps: 30,
+    seed,
+    noise: 0.001,
+    durationMs: 3600,
+    tracks: [hand],
+    expected: [],
+    expectedEvents: plan.wakes
+      ? ['wake', 'pinch-start', 'pan', 'pinch-end']
+      : [],
+  });
+}
+
 export function buildClipLibrary(): Clip[] {
   const clips: Clip[] = [];
   for (const gesture of GESTURES) {
@@ -396,6 +468,9 @@ export function buildClipLibrary(): Clip[] {
   }
   for (let i = 0; i < CLIPS_PER_ACCIDENT_GROUP; i++) {
     clips.push(accidentClip(i));
+  }
+  for (let i = 0; i < PAN_PLANS.length; i++) {
+    clips.push(panClip(i));
   }
   return clips;
 }
