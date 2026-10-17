@@ -3,6 +3,7 @@ import type { Landmark } from './types';
 export const WRIST = 0;
 export const THUMB_TIP = 4;
 export const INDEX_MCP = 5;
+export const MIDDLE_MCP = 9;
 export const PINKY_MCP = 17;
 
 export type Finger = 'index' | 'middle' | 'ring' | 'pinky';
@@ -60,4 +61,22 @@ export function digitExtension(
   const base = distance(at(landmarks, mcp), wrist, aspect);
   if (base <= 0) return 0;
   return distance(at(landmarks, tip), wrist, aspect) / base;
+}
+
+export interface PalmPoint {
+  /** Middle knuckle position in units of image width. */
+  x: number;
+  y: number;
+  /** Wrist to middle knuckle, in the same units. Scales motion by hand size. */
+  size: number;
+}
+
+export function palmPoint(landmarks: Landmark[], aspect: number): PalmPoint {
+  const knuckle = at(landmarks, MIDDLE_MCP);
+  const wrist = at(landmarks, WRIST);
+  return {
+    x: knuckle.x,
+    y: knuckle.y / aspect,
+    size: distance(knuckle, wrist, aspect),
+  };
 }

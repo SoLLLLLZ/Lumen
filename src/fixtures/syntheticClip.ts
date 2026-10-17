@@ -69,6 +69,14 @@ export interface TrackSegment {
   target: PoseTarget;
 }
 
+/** A smooth sideways and vertical shift of the hand, in image widths. */
+export interface Move {
+  fromMs: number;
+  toMs: number;
+  dx: number;
+  dy: number;
+}
+
 export interface HandTrack {
   scale: number;
   cx: number;
@@ -78,6 +86,7 @@ export interface HandTrack {
   /** Sideways wobble amplitude, fraction of image width. */
   drift: number;
   segments: TrackSegment[];
+  moves?: Move[];
   /** The hand leaves the picture after this time. */
   visibleUntilMs?: number;
 }
@@ -115,12 +124,20 @@ function specAt(track: HandTrack, timeMs: number, aspect: number): HandSpec {
     (value, i) => (from.target.curl[i] ?? value) * (1 - blend) + value * blend,
   ) as HandSpec['curl'];
   const wobble = Math.sin(timeMs / 400) * track.drift;
+  const shift = { x: 0, y: 0 };
+  for (const move of track.moves ?? []) {
+    const progress = (timeMs - move.fromMs) / (move.toMs - move.fromMs);
+    const clamped = Math.min(1, Math.max(0, progress));
+    const eased = clamped * clamped * (3 - 2 * clamped);
+    shift.x += move.dx * eased;
+    shift.y += move.dy * eased * aspect;
+  }
   return {
     curl,
     thumb: blend < 0.5 ? from.target.thumb : current.target.thumb,
     scale: track.scale,
-    cx: track.cx + wobble,
-    cy: track.cy + wobble * 0.5,
+    cx: track.cx + wobble + shift.x,
+    cy: track.cy + wobble * 0.5 + shift.y,
     rotation: track.rotation,
     mirror: track.mirror,
     aspect,

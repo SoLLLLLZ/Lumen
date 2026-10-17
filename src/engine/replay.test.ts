@@ -31,6 +31,8 @@ describe('clip library', () => {
       'talking',
       'face-touching',
       'wake-sleep',
+      'flick',
+      'accident',
     ]) {
       expect(counts[category] ?? 0, category).toBeGreaterThanOrEqual(10);
     }

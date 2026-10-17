@@ -1,5 +1,7 @@
 export type GestureEvent =
   | { type: 'wake'; timeMs: number }
+  | { type: 'next'; timeMs: number }
+  | { type: 'previous'; timeMs: number }
   | { type: 'sleep'; timeMs: number; reason: 'fist' | 'no-hand' };
 
 type Handler = (event: GestureEvent) => void;
