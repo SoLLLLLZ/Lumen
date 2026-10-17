@@ -6,9 +6,12 @@ export const INDEX_MCP = 5;
 export const PINKY_MCP = 17;
 
 export type Finger = 'index' | 'middle' | 'ring' | 'pinky';
+export type Digit = 'thumb' | Finger;
 export const FINGERS: readonly Finger[] = ['index', 'middle', 'ring', 'pinky'];
+export const DIGITS: readonly Digit[] = ['thumb', ...FINGERS];
 
-const FINGER_JOINTS: Record<Finger, { mcp: number; tip: number }> = {
+const DIGIT_JOINTS: Record<Digit, { mcp: number; tip: number }> = {
+  thumb: { mcp: 2, tip: 4 },
   index: { mcp: 5, tip: 8 },
   middle: { mcp: 9, tip: 12 },
   ring: { mcp: 13, tip: 16 },
@@ -42,16 +45,17 @@ export function pinchRatio(landmarks: Landmark[], aspect: number): number {
 }
 
 /**
- * How far the fingertip is from the wrist compared with the knuckle.
+ * How far the fingertip is from the wrist compared with the knuckle (for the
+ * thumb, the joint at its base).
  * Around 1.9 for a straight finger, below 1 for a finger folded into the palm.
  * Independent of hand size and rotation.
  */
-export function fingerExtension(
+export function digitExtension(
   landmarks: Landmark[],
-  finger: Finger,
+  digit: Digit,
   aspect: number,
 ): number {
-  const { mcp, tip } = FINGER_JOINTS[finger];
+  const { mcp, tip } = DIGIT_JOINTS[digit];
   const wrist = at(landmarks, WRIST);
   const base = distance(at(landmarks, mcp), wrist, aspect);
   if (base <= 0) return 0;

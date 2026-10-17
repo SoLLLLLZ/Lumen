@@ -129,7 +129,7 @@ export function App() {
                   .join(', ')
               : 'no hand'}
           </dd>
-          <dt>Finger extension</dt>
+          <dt>Extension (thumb, index, middle, ring, pinky)</dt>
           <dd>
             {stats.hands.length > 0
               ? stats.hands

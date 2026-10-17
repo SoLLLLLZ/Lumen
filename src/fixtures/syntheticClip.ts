@@ -47,8 +47,8 @@ export function poseTarget(pose: Pose, rng: Rng): PoseTarget {
       };
     case 'v':
       return {
-        curl: [straight(), straight(), folded(), folded()],
-        thumb: { kind: 'tucked' },
+        curl: [straight(), folded(), folded(), folded()],
+        thumb: { kind: 'out' },
       };
     case 'fist':
       return {

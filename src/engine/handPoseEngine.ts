@@ -5,7 +5,7 @@ import {
   type Classification,
 } from './poseClassifier';
 import { distance, WRIST } from './measurements';
-import type { Finger } from './measurements';
+import type { Digit } from './measurements';
 import type { Landmark, Pose, TrackedHand } from './types';
 
 export interface HandState {
@@ -14,7 +14,7 @@ export interface HandState {
   confidence: number;
   pose: Pose;
   pinchRatio: number;
-  extensions: Record<Finger, number>;
+  extensions: Record<Digit, number>;
 }
 
 export interface EngineOptions {

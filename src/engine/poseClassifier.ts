@@ -1,9 +1,4 @@
-import {
-  FINGERS,
-  fingerExtension,
-  pinchRatio,
-  type Finger,
-} from './measurements';
+import { DIGITS, digitExtension, pinchRatio, type Digit } from './measurements';
 import type { Landmark, Pose } from './types';
 
 export interface PoseThresholds {
@@ -30,7 +25,7 @@ export const DEFAULT_THRESHOLDS: PoseThresholds = {
 export interface Classification {
   pose: Pose;
   pinchRatio: number;
-  extensions: Record<Finger, number>;
+  extensions: Record<Digit, number>;
 }
 
 /** Classifies single frames. Holds only the pinch hysteresis state. */
@@ -45,9 +40,9 @@ export class PoseClassifier {
   classify(landmarks: Landmark[]): Classification {
     const t = this.thresholds;
     const ratio = pinchRatio(landmarks, this.aspect);
-    const extensions = {} as Record<Finger, number>;
-    for (const finger of FINGERS) {
-      extensions[finger] = fingerExtension(landmarks, finger, this.aspect);
+    const extensions = {} as Record<Digit, number>;
+    for (const digit of DIGITS) {
+      extensions[digit] = digitExtension(landmarks, digit, this.aspect);
     }
 
     if (this.pinched) {
@@ -59,15 +54,29 @@ export class PoseClassifier {
       this.pinched = false;
     }
 
-    const up = (finger: Finger) => extensions[finger] >= t.extended;
-    const down = (finger: Finger) => extensions[finger] <= t.curled;
+    const up = (digit: Digit) => extensions[digit] >= t.extended;
+    const down = (digit: Digit) => extensions[digit] <= t.curled;
 
     let pose: Pose = 'none';
     if (this.pinched) pose = 'pinch';
-    else if (FINGERS.every(up)) pose = 'open_palm';
-    else if (up('index') && up('middle') && down('ring') && down('pinky')) {
+    else if (up('index') && up('middle') && up('ring') && up('pinky')) {
+      pose = 'open_palm';
+    } else if (
+      up('thumb') &&
+      up('index') &&
+      down('middle') &&
+      down('ring') &&
+      down('pinky')
+    ) {
       pose = 'v';
-    } else if (FINGERS.every(down)) pose = 'fist';
+    } else if (
+      down('index') &&
+      down('middle') &&
+      down('ring') &&
+      down('pinky')
+    ) {
+      pose = 'fist';
+    }
 
     return { pose, pinchRatio: ratio, extensions };
   }

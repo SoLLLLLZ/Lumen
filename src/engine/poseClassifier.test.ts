@@ -4,7 +4,7 @@ import {
   DEFAULT_SPEC,
   type HandSpec,
 } from '../fixtures/syntheticHand';
-import { fingerExtension, handWidth, pinchRatio } from './measurements';
+import { digitExtension, handWidth, pinchRatio } from './measurements';
 import { PoseClassifier, PoseStabilizer } from './poseClassifier';
 import type { Pose } from './types';
 
@@ -16,8 +16,8 @@ function hand(overrides: Partial<HandSpec>) {
 
 const OPEN: Partial<HandSpec> = { curl: [0, 0, 0, 0], thumb: { kind: 'out' } };
 const V: Partial<HandSpec> = {
-  curl: [0, 0, 1, 1],
-  thumb: { kind: 'tucked' },
+  curl: [0, 1, 1, 1],
+  thumb: { kind: 'out' },
 };
 const FIST: Partial<HandSpec> = {
   curl: [1, 1, 1, 1],
@@ -37,8 +37,8 @@ describe('measurements', () => {
     const small = hand({ ...PINCH, scale: 0.08 });
     const large = hand({ ...PINCH, scale: 0.2, rotation: 0.7 });
     expect(pinchRatio(small, ASPECT)).toBeCloseTo(pinchRatio(large, ASPECT), 2);
-    expect(fingerExtension(small, 'middle', ASPECT)).toBeCloseTo(
-      fingerExtension(large, 'middle', ASPECT),
+    expect(digitExtension(small, 'middle', ASPECT)).toBeCloseTo(
+      digitExtension(large, 'middle', ASPECT),
       2,
     );
   });
@@ -51,8 +51,8 @@ describe('measurements', () => {
   });
 
   it('see a straight finger as far more extended than a folded one', () => {
-    expect(fingerExtension(hand(OPEN), 'index', ASPECT)).toBeGreaterThan(1.6);
-    expect(fingerExtension(hand(FIST), 'index', ASPECT)).toBeLessThan(1.3);
+    expect(digitExtension(hand(OPEN), 'index', ASPECT)).toBeGreaterThan(1.6);
+    expect(digitExtension(hand(FIST), 'index', ASPECT)).toBeLessThan(1.3);
   });
 });
 
@@ -75,12 +75,20 @@ describe('PoseClassifier', () => {
   });
 
   it('rejects the neighbors of each pose', () => {
-    // Three fingers up is not a V and not an open palm.
+    // Three fingers up is neither a V nor an open palm.
     expect(classify({ curl: [0, 0, 0, 1], thumb: { kind: 'tucked' } })).toBe(
       'none',
     );
-    // Index alone is not a V.
+    // Index alone, thumb tucked, is not a V.
     expect(classify({ curl: [0, 1, 1, 1], thumb: { kind: 'tucked' } })).toBe(
+      'none',
+    );
+    // The old index plus middle pose is not a V any more.
+    expect(classify({ curl: [0, 0, 1, 1], thumb: { kind: 'tucked' } })).toBe(
+      'none',
+    );
+    // Thumb, index and middle up is not a V.
+    expect(classify({ curl: [0, 0, 1, 1], thumb: { kind: 'out' } })).toBe(
       'none',
     );
     // Open palm with the ring finger down is not an open palm.
