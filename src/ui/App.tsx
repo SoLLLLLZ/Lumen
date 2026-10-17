@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { GestureEvent } from '../engine/eventBus';
 import { POSES, type Pose } from '../engine/types';
+import { Reader } from './Reader';
 import { useHandTracking, type TrackingPhase } from './useHandTracking';
 
 const PHASE_MESSAGES: Record<TrackingPhase, string> = {
@@ -60,6 +61,8 @@ export function App() {
         Lumen reads hand gestures from your webcam. Video is processed on this
         device only. Nothing is stored or sent anywhere.
       </p>
+
+      <Reader />
 
       {model.status === 'loading' && (
         <p>

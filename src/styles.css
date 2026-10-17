@@ -57,3 +57,52 @@ main {
   align-items: center;
   margin-top: 1rem;
 }
+
+.reader {
+  margin: 1rem 0 1.5rem;
+}
+
+.reader-title {
+  font-style: italic;
+  margin: 0 0 0.5rem;
+}
+
+.page-frame {
+  position: relative;
+}
+
+.page {
+  box-sizing: border-box;
+  height: min(32rem, 65vh);
+  overflow: hidden;
+  padding: 1rem 1.25rem;
+  background: #fbf7ee;
+  color: #222;
+  font-family: Georgia, serif;
+  font-size: 1.15rem;
+  line-height: 1.6;
+}
+
+.page.measure {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.page h2 {
+  margin: 0 0 1rem;
+  font-size: 1.3rem;
+}
+
+.page p {
+  margin: 0 0 0.75rem;
+}
+
+.reader-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
