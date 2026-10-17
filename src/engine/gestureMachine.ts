@@ -23,12 +23,24 @@ export const DEFAULT_MACHINE_CONFIG: MachineConfig = {
   wakeHoldMs: 700,
   sleepFistHoldMs: 1000,
   noHandSleepMs: 3000,
-  tapMaxMs: 400,
-  doubleTapMs: 600,
+  tapMaxMs: 600,
+  doubleTapMs: 900,
 };
 
 /** Most a tap may move, as a fraction of the screen. */
-const TAP_TRAVEL = 0.05;
+const TAP_TRAVEL = 0.12;
+
+/**
+ * Zoom is applied this long after it is seen. Letting go of a V relaxes the
+ * thumb before the pose changes, and that last movement must not zoom.
+ */
+const ZOOM_SETTLE_MS = 300;
+
+interface SpreadSample {
+  timeMs: number;
+  spread: number;
+  point: ScreenPoint;
+}
 
 type MachineHand = Pick<
   HandState,
@@ -45,8 +57,8 @@ interface ActiveHold {
   /** Total distance moved by a pinch, in screen fractions. */
   travel: number;
   lastPalm?: { x: number; y: number };
-  /** Thumb to index gap during a V, as a fraction of hand width. */
-  lastSpread?: number;
+  /** Thumb to index gap during a V, waiting out the settle time. */
+  spreads: SpreadSample[];
 }
 
 /**
@@ -150,17 +162,27 @@ export class GestureMachine {
     if (!hand || !Number.isFinite(hand.pinchRatio) || hand.pinchRatio <= 0) {
       return;
     }
-    const previous = hold.lastSpread;
-    hold.lastSpread = hand.pinchRatio;
-    if (previous === undefined || previous === hand.pinchRatio) return;
-    const center = mapToScreen(hand.pointer, this.activeZone);
-    this.bus.emit({
-      type: 'zoom',
+    hold.spreads.push({
       timeMs,
-      factor: hand.pinchRatio / previous,
-      x: center.x,
-      y: center.y,
+      spread: hand.pinchRatio,
+      point: mapToScreen(hand.pointer, this.activeZone),
     });
+    const queue = hold.spreads;
+    while (
+      queue.length >= 2 &&
+      (queue[1]?.timeMs ?? Infinity) <= timeMs - ZOOM_SETTLE_MS
+    ) {
+      const [older, newer] = queue;
+      queue.shift();
+      if (!older || !newer || older.spread === newer.spread) continue;
+      this.bus.emit({
+        type: 'zoom',
+        timeMs,
+        factor: newer.spread / older.spread,
+        x: newer.point.x,
+        y: newer.point.y,
+      });
+    }
   }
 
   private startingPoses(): Pose[] {
@@ -209,6 +231,7 @@ export class GestureMachine {
       sinceMs: timeMs,
       done: false,
       travel: 0,
+      spreads: [],
     };
   }
 

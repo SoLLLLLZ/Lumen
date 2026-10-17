@@ -8,6 +8,7 @@ import type { Pose } from '../engine/types';
 import { isPermissionError, startCamera, stopStream } from '../tracking/camera';
 import { downloadClip } from '../tracking/downloadClip';
 import { clearCanvas, drawSkeleton } from '../tracking/drawSkeleton';
+import { drawScreenHand, fitToWindow } from '../tracking/drawScreenHand';
 import {
   loadHandTracker,
   type Delegate,
@@ -71,6 +72,7 @@ interface Session {
 export function useHandTracking(bus: EventBus, activeZone: number) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
   const trackerRef = useRef<HandTracker | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const recordingRef = useRef<ActiveRecording | null>(null);
@@ -176,10 +178,15 @@ export function useHandTracking(bus: EventBus, activeZone: number) {
           stop('error');
           return;
         }
+        const overlay = overlayRef.current;
         if (showSkeletonRef.current) {
           drawSkeleton(canvas, latestHands);
+          if (overlay) {
+            drawScreenHand(overlay, latestHands, activeZoneRef.current);
+          }
         } else {
           clearCanvas(canvas);
+          if (overlay) clearCanvas(overlay);
         }
       }
       scheduleNextFrame();
@@ -215,6 +222,12 @@ export function useHandTracking(bus: EventBus, activeZone: number) {
       if (document.hidden) stop('paused');
     };
     const onPageHide = () => stop('idle');
+    const overlay = overlayRef.current;
+    const onResize = () => {
+      if (overlay) fitToWindow(overlay);
+    };
+    onResize();
+    window.addEventListener('resize', onResize);
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('pagehide', onPageHide);
 
@@ -224,6 +237,8 @@ export function useHandTracking(bus: EventBus, activeZone: number) {
         clearInterval(publishTimer);
         document.removeEventListener('visibilitychange', onVisibilityChange);
         window.removeEventListener('pagehide', onPageHide);
+        window.removeEventListener('resize', onResize);
+        if (overlay) clearCanvas(overlay);
         stopStream(stream);
         video.srcObject = null;
         clearCanvas(canvas);
@@ -283,6 +298,7 @@ export function useHandTracking(bus: EventBus, activeZone: number) {
   return {
     videoRef,
     canvasRef,
+    overlayRef,
     model,
     delegate,
     phase,

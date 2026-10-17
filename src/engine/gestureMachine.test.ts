@@ -431,7 +431,7 @@ describe('GestureMachine', () => {
     it('zooms by the change in spread, around the fingertips', () => {
       const sim = awake();
       sim.hold([vAt(0.5, 0.4, 0.5)], 100);
-      sim.hold([vAt(1, 0.4, 0.5)], FRAME_MS);
+      sim.hold([vAt(1, 0.4, 0.5)], 400);
       const [zoom] = zooms(sim.events);
       expect(zoom).toMatchObject({
         factor: expect.closeTo(2, 10),
@@ -443,9 +443,29 @@ describe('GestureMachine', () => {
     it('zooms out when the spread closes', () => {
       const sim = awake();
       sim.hold([vAt(1)], 100);
-      sim.hold([vAt(0.8)], FRAME_MS);
+      sim.hold([vAt(0.8)], 400);
       expect(zooms(sim.events)[0]).toMatchObject({
         factor: expect.closeTo(0.8, 10),
+      });
+    });
+
+    it('ignores the thumb relaxing just before the V ends', () => {
+      const sim = awake();
+      sim.hold([vAt(1)], 500);
+      sim.hold([vAt(0.5)], 100);
+      sim.hold([palm()], 400);
+      expect(zooms(sim.events)).toEqual([]);
+    });
+
+    it('still applies a zoom that was held steady before the release', () => {
+      const sim = awake();
+      sim.hold([vAt(0.5)], 100);
+      sim.hold([vAt(1)], 400);
+      sim.hold([vAt(0.5)], 100);
+      sim.hold([palm()], 400);
+      expect(zooms(sim.events)).toHaveLength(1);
+      expect(zooms(sim.events)[0]).toMatchObject({
+        factor: expect.closeTo(2, 10),
       });
     });
 
@@ -474,6 +494,17 @@ describe('GestureMachine', () => {
       sim.hold([pinchHand()], 200);
       sim.hold([palm()], 150);
       sim.hold([pinchHand()], 200);
+      sim.hold([palm()], FRAME_MS);
+      expect(resets(sim.events)).toHaveLength(1);
+    });
+
+    it('resets for slower, slightly wobbly taps a real hand makes', () => {
+      const sim = awake();
+      sim.hold([pinchHand()], 250);
+      sim.hold([pinchHand(0.03)], 250);
+      sim.hold([palm()], 700);
+      sim.hold([pinchHand()], 250);
+      sim.hold([pinchHand(0.03)], 200);
       sim.hold([palm()], FRAME_MS);
       expect(resets(sim.events)).toHaveLength(1);
     });
